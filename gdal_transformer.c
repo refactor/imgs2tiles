@@ -9,24 +9,23 @@ int main(int argc, char *argv[])
         exit(0);
     }
 
-    GDALDatasetH hSrcDS;
 
     GDALAllRegister();
 
-    hSrcDS = GDALOpen(argv[1], GA_ReadOnly);
+    GDALDatasetH hSrcDS = GDALOpen(argv[1], GA_ReadOnly);
     CPLAssert(hSrcDS != NULL);
 
     GDALDataType eDT = GDALGetRasterDataType(GDALGetRasterBand(hSrcDS, 1));
 
-    const char *pszSrcWKT;
-
-    pszSrcWKT = GDALGetProjectionRef(hSrcDS);
+    const char *pszSrcWKT = GDALGetProjectionRef(hSrcDS);
     CPLAssert(pszSrcWKT != NULL && strlen(pszSrcWKT) > 0);
 
     OGRSpatialReferenceH hSRS = OSRNewSpatialReference(NULL);
-    //OSRImportFromEPSG(hSRS, 3857);
+    OSRImportFromEPSG(hSRS, 3857);
+/*
     OSRSetUTM(hSRS, 17, TRUE);
     OSRSetWellKnownGeogCS(hSRS, "WGS84");
+//*/
 
     char *pszDstWKT = NULL;
     OSRExportToWkt(hSRS, &pszDstWKT);
@@ -51,6 +50,8 @@ int main(int argc, char *argv[])
     GDALDatasetH hDstDS = GDALCreate( hDriver, "out.tif", nPixels, nLines, 
                                      GDALGetRasterCount(hSrcDS), eDT, NULL );
     CPLAssert( hDstDS != NULL );
+    GDALClose(hDstDS);
+    GDALClose(hSrcDS);
 
     return 0;
 }
