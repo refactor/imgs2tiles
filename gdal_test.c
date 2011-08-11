@@ -1,7 +1,9 @@
 #include "gdal.h"
 #include "cpl_conv.h"
+#include "cpl_string.h"
 
 static void printMeta(GDALDriverH hDataset);
+static void printBand(GDALRasterBandH hBand);
 
 int main(int argc, char* argv[]) 
 {
@@ -19,7 +21,35 @@ int main(int argc, char* argv[])
     }
     printMeta(hDataset);
 
+    GDALRasterBandH hBand = GDALGetRasterBand(hDataset, 1);
+    printBand(hBand);
+
+    GDALClose(hDataset);
+
     return 0;
+}
+
+static void printBand(GDALRasterBandH hBand)
+{
+    int nBlockXSize, nBlockYSize;
+    int bGotMin, bGotMax;
+    double adfMinMax[2];
+    GDALGetBlockSize(hBand, &nBlockXSize, &nBlockYSize);
+    printf("Block=%dx%d Type=%s, ColorInterp=%s\n", nBlockXSize, nBlockYSize,
+            GDALGetDataTypeName(GDALGetRasterDataType(hBand)), GDALGetColorInterpretationName(GDALGetRasterColorInterpretation(hBand)));
+
+    adfMinMax[0] = GDALGetRasterMinimum( hBand, &bGotMin );
+    adfMinMax[1] = GDALGetRasterMaximum( hBand, &bGotMax );
+    if( ! (bGotMin && bGotMax) )
+        GDALComputeRasterMinMax( hBand, TRUE, adfMinMax );
+    printf( "Min=%.3fd, Max=%.3f\n", adfMinMax[0], adfMinMax[1] );
+
+    if( GDALGetOverviewCount(hBand) > 0 )
+        printf( "Band has %d overviews.\n", GDALGetOverviewCount(hBand));
+
+    if( GDALGetRasterColorTable( hBand ) != NULL )
+        printf( "Band has a color table with %d entries.\n", 
+                GDALGetColorEntryCount( GDALGetRasterColorTable( hBand ) ) );
 }
 
 static 
@@ -37,5 +67,11 @@ void printMeta(GDALDriverH hDataset)
          printf( "Origin = (%.6f,%.6f)\n",  adfGeoTransform[0], adfGeoTransform[3] ); 
          printf( "Pixel Size = (%.6f,%.6f)\n",  adfGeoTransform[1], adfGeoTransform[5] );
     }
+
+    char **papszMetadata = GDALGetMetadata(hDriver, NULL);
+    if (CSLFetchBoolean(papszMetadata, GDAL_DCAP_CREATE, FALSE))
+        printf("Driver %s supports Create() method.\n", GDALGetDriverLongName(hDriver));
+    if (CSLFetchBoolean(papszMetadata, GDAL_DCAP_CREATECOPY, FALSE))
+        printf("Driver %s supports CreateCopy() method.\n", GDALGetDriverLongName(hDriver));
 
 }
