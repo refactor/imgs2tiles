@@ -57,6 +57,7 @@ static
 void printMeta(GDALDriverH hDataset)
 {
     GDALDriverH hDriver = GDALGetDatasetDriver(hDataset);
+    printf("Driver CreationOptions: %s\n", GDALGetDriverCreationOptionList(hDriver));
     printf("Driver: %s/%s\n", GDALGetDriverShortName(hDriver), GDALGetDriverLongName(hDriver));
     printf("Size is %dx%dx%d\n", GDALGetRasterXSize(hDataset), GDALGetRasterYSize(hDataset), GDALGetRasterCount(hDataset));
     if (GDALGetProjectionRef(hDataset) != NULL) {

@@ -1,14 +1,16 @@
 #include "ogr_srs_api.h"
 
 
-int main()
+int main(int argc, char *argv[])
 {
     OGRSpatialReferenceH hSRS = OSRNewSpatialReference(NULL);
-    //OSRImportFromEPSG(hSRS, 3857);
+    
+    OSRImportFromEPSG(hSRS, atoi(argv[1]));  // 3857);
+/*
     OSRSetProjCS(hSRS, "UTM 17(WGS84) in northern hemisphere.");
     OSRSetWellKnownGeogCS(hSRS, "WGS84");
     OSRSetUTM(hSRS, 17, TRUE);
-
+// */
 
     char *pszWKT = NULL;
 
