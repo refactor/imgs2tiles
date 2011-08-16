@@ -24,6 +24,7 @@ int main(int argc, char* argv[])
     GDALRasterBandH hBand = GDALGetRasterBand(hDataset, 1);
     printBand(hBand);
 
+
     GDALClose(hDataset);
 
     return 0;
@@ -62,10 +63,35 @@ void printMeta(GDALDriverH hDataset)
         printf("Projection is '%s'\n", GDALGetProjectionRef(hDataset));
     }
 
+    const char* descs[6] = {
+        "pixel leftest corner",
+        "pixel width",
+        "",
+        "pixel uppest corner",
+        "",
+        "pixel height"
+    };
     double        adfGeoTransform[6];
     if( GDALGetGeoTransform( hDataset, adfGeoTransform ) == CE_None ) {
          printf( "Origin = (%.6f,%.6f)\n",  adfGeoTransform[0], adfGeoTransform[3] ); 
          printf( "Pixel Size = (%.6f,%.6f)\n",  adfGeoTransform[1], adfGeoTransform[5] );
+        for (int i = 0; i < 6; ++i) {
+            printf("padf transform[%d]: %f\t%s\n", i, adfGeoTransform[i], descs[i]);
+        }
+    }
+
+    printf("GCP projection: %s\n", GDALGetGCPProjection(hDataset));
+
+    CPLErrorReset();
+    const GDAL_GCP* gcp = GDALGetGCPs(hDataset);
+
+    if (gcp != NULL) {
+ //       fprintf( stderr, "GDALGetGCPs failed - %d  %d\n%s\n", CPLGetLastErrorType(),
+ //                 CPLGetLastErrorNo(), CPLGetLastErrorMsg() );
+        printf("GCP pszId: %s, pszInfo: %s\n", 
+                gcp->pszId, gcp->pszInfo);
+        printf("\t dfGCPPixel: %f, dfGCPLine: %f, dfGCPX: %f, dfGCPY: %f, dfGCPZ: %f\n",
+                gcp->dfGCPPixel, gcp->dfGCPLine, gcp->dfGCPX, gcp->dfGCPY, gcp->dfGCPZ);
     }
 
     char **papszMetadata = GDALGetMetadata(hDriver, NULL);
