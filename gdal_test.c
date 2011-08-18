@@ -7,6 +7,8 @@ static void printBand(GDALRasterBandH hBand);
 
 int main(int argc, char* argv[]) 
 {
+    printf("sizeof(long): %zu, sizeof(*void): %zu\n\n", sizeof(long), sizeof(void*));
+
     if (argc < 2) {
         printf( "no input file\n");
         exit(0);
