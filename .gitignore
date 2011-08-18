@@ -1,6 +1,8 @@
 tags
+*.beam
 *.swp
 *.tif
 *.o
 a.out
 *~
+.DS_Store
