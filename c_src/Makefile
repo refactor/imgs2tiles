@@ -1,4 +1,5 @@
 objects = gdal_nifs.so
+beams = $(objects:%.so=%.beam)
 
 all: $(objects)
 
@@ -7,3 +8,4 @@ $(objects): %.so: %.c
 
 clean: 
 	-rm $(objects)
+	-rm $(beams)
