@@ -3,6 +3,7 @@ tags
 *.swp
 *.tif
 *.o
+*.so
 a.out
 *~
 .DS_Store

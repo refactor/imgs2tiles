@@ -1,0 +1,168 @@
+#include "erl_nif.h"
+
+#include "gdal.h"
+#include "cpl_conv.h"
+
+#include <stdlib.h>
+#include <string.h>
+#include <limits.h>
+
+static ErlNifResourceType* gdal_datasets_RESOURCE;
+
+typedef struct
+{
+    GDALDatasetH hDataset;
+    int foobar;
+} gdal_dataset_handle;
+
+typedef struct
+{
+    int foo;
+    int bar;
+} gdal_priv_data;
+
+// Atoms (initialized in on_load)
+static ERL_NIF_TERM ATOM_ALLOCATION_ERROR;
+static ERL_NIF_TERM ATOM_ERROR;
+static ERL_NIF_TERM ATOM_FALSE;
+static ERL_NIF_TERM ATOM_TRUE;
+static ERL_NIF_TERM ATOM_OK;
+
+ERL_NIF_TERM gdal_nif_open(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    char name[4096];
+    size_t name_sz;
+    if (enif_get_string(env, argv[0], name, sizeof(name), ERL_NIF_LATIN1)) {
+        name_sz = strlen(name);
+
+        GDALDatasetH hDataset = GDALOpen(name, GA_ReadOnly);
+        if (hDataset != NULL) {
+            gdal_dataset_handle* handle = enif_alloc_resource(
+                                                    gdal_datasets_RESOURCE, 
+                                                    sizeof(gdal_dataset_handle));
+            memset(handle, '\0', sizeof(*handle));
+            handle->hDataset = hDataset;
+
+            ERL_NIF_TERM result = enif_make_resource(env, handle);
+            enif_release_resource(handle);
+
+            return enif_make_tuple2(env, ATOM_OK, result);
+        }
+        else {
+            return enif_make_tuple2(env, ATOM_ERROR, enif_make_string(env, "the file doesn't exist", ERL_NIF_LATIN1));
+        }
+    }
+    else {
+        return enif_make_badarg(env);
+    }
+}
+
+ERL_NIF_TERM gdal_nif_close(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    gdal_dataset_handle* handle;
+
+    if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
+        GDALDatasetH hDataset = handle->hDataset;
+        if (hDataset != NULL) {
+            GDALClose(hDataset);
+            return ATOM_OK;
+        }
+        else {
+            return enif_make_tuple2(env, ATOM_ERROR, enif_make_string(env, "close error", ERL_NIF_LATIN1));
+        }
+    }
+    else {
+        return enif_make_badarg(env);
+    }
+}
+
+ERL_NIF_TERM gdal_nif_get_meta(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    gdal_dataset_handle* handle;
+
+    if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
+        GDALDatasetH hDataset = handle->hDataset;
+        if (hDataset != NULL) {
+            GDALDriverH hDriver = GDALGetDatasetDriver(hDataset);
+            char buf[256];
+            ERL_NIF_TERM terms[8];
+            int idx = 0;
+
+            sprintf(buf, "%s/%s",
+                    GDALGetDriverShortName(hDriver), GDALGetDriverLongName(hDriver));
+            terms[idx++] = enif_make_tuple2(env, enif_make_atom(env, "driver"), enif_make_string(env, buf, ERL_NIF_LATIN1));
+
+            sprintf(buf, "%dx%dx%d", 
+                    GDALGetRasterXSize(hDataset), GDALGetRasterYSize(hDataset), GDALGetRasterCount(hDataset));
+            terms[idx++]    = enif_make_tuple2(env, enif_make_atom(env, "rasterSize"), 
+                                                        enif_make_string(env, buf, ERL_NIF_LATIN1));
+
+            terms[idx++] = enif_make_tuple2(env, enif_make_atom(env, "rasterCount"),
+                                                        enif_make_int(env, GDALGetRasterCount(hDataset)));
+
+            double        adfGeoTransform[6];
+            if( GDALGetGeoTransform( hDataset, adfGeoTransform ) == CE_None ) {
+                sprintf(buf, "(%.6f,%.6f)", adfGeoTransform[0], adfGeoTransform[3]);
+                terms[idx++] = enif_make_tuple2(env, enif_make_atom(env, "origin"),
+                                                        enif_make_string(env, buf, ERL_NIF_LATIN1));
+
+                sprintf(buf, "(%.6f,%.6f)", adfGeoTransform[1], adfGeoTransform[5]);
+                terms[idx++] = enif_make_tuple2(env, enif_make_atom(env, "pixelSize"), 
+                                                        enif_make_string(env, buf, ERL_NIF_LATIN1));
+            }
+
+            if (GDALGetProjectionRef(hDataset) != NULL) {
+                terms[idx++]   = enif_make_tuple2(env, enif_make_atom(env, "projection"), 
+                                                        enif_make_string(env, GDALGetProjectionRef(hDataset), ERL_NIF_LATIN1));
+//                return enif_make_list(env, 4, driverMeta, rasterSize, rasterCount, proj);
+            }
+
+            return enif_make_list_from_array(env, terms, idx);
+        }
+        else {
+            return ATOM_OK;
+        }
+    }
+    else {
+        return enif_make_badarg(env);
+    }
+}
+
+static ErlNifFunc nif_funcs[] = 
+{
+    {"open", 1, gdal_nif_open},
+    {"get_meta", 1, gdal_nif_get_meta},
+    {"close", 1, gdal_nif_close}
+};
+
+static void gdal_nifs_resource_cleanup(ErlNifEnv* env, void* arg)
+{
+
+}
+
+static int on_load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info)
+{
+    gdal_datasets_RESOURCE = enif_open_resource_type(env, NULL, "gdal_datasets_resource",
+                                        &gdal_nifs_resource_cleanup,
+                                        ERL_NIF_RT_CREATE | ERL_NIF_RT_TAKEOVER,
+                                        0);
+
+    gdal_priv_data* priv = enif_alloc(sizeof(gdal_priv_data));
+    priv->foo = 123;
+    priv->bar = 345;
+    *priv_data = priv;
+
+    // Register all known configured GDAL drivers
+    GDALAllRegister();
+
+    // Initialize atoms that we use throughout the NIF.
+    ATOM_ALLOCATION_ERROR = enif_make_atom(env, "allocation_error");
+    ATOM_ERROR = enif_make_atom(env, "error");
+    ATOM_FALSE = enif_make_atom(env, "false");
+    ATOM_TRUE = enif_make_atom(env, "true");
+    ATOM_OK = enif_make_atom(env, "ok");
+
+    return 0;
+}
+
+ERL_NIF_INIT(gdal_nifs, nif_funcs, &on_load, NULL, NULL, NULL);
