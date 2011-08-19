@@ -128,9 +128,9 @@ ERL_NIF_TERM gdal_nif_get_meta(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv
                 char** files = fileList;
 
                 gdal_priv_data* priv = (gdal_priv_data*)enif_priv_data(env);
-                LOG("start.... count=%d\n", CSLCount(fileList));
+                LOG("start.... count=%d", CSLCount(fileList));
                 do {
-                    LOG("file: %p -> %s\n", files, *files);
+                    LOG("file: %p -> %s", files, *files);
                     fileTerms[ fileIdx++ ] = enif_make_string(env, *files, ERL_NIF_LATIN1);
                 } while(*(++files)) ;
                 CSLDestroy(fileList);
