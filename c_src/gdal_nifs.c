@@ -2,7 +2,9 @@
 
 #include "gdal.h"
 #include "cpl_conv.h"
+#include "cpl_string.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
@@ -21,9 +23,21 @@ typedef struct
     int bar;
 } gdal_priv_data;
 
+#ifdef DEBUG
+    static FILE* logger;
+    #define LOG(msg, ...) (fprintf(logger, msg, __VA_ARGS__), fflush(logger))
+    #define OPEN_LOGER() (logger =  fopen("gdal_nifs.log", "a"))
+    #define CLOSE_LOGER() ( fclose(logger) )
+#else
+    #define LOG(msg, ...)
+    #define OPEN_LOGER() 
+    #define CLOSE_LOGER()
+#endif
+
 // Atoms (initialized in on_load)
 static ERL_NIF_TERM ATOM_ALLOCATION_ERROR;
 static ERL_NIF_TERM ATOM_ERROR;
+static ERL_NIF_TERM ATOM_NOT_OPEN;
 static ERL_NIF_TERM ATOM_FALSE;
 static ERL_NIF_TERM ATOM_TRUE;
 static ERL_NIF_TERM ATOM_OK;
@@ -65,6 +79,7 @@ ERL_NIF_TERM gdal_nif_close(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
         GDALDatasetH hDataset = handle->hDataset;
         if (hDataset != NULL) {
             GDALClose(hDataset);
+            handle->hDataset = NULL;
             return ATOM_OK;
         }
         else {
@@ -94,33 +109,47 @@ ERL_NIF_TERM gdal_nif_get_meta(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv
 
             sprintf(buf, "%dx%dx%d", 
                     GDALGetRasterXSize(hDataset), GDALGetRasterYSize(hDataset), GDALGetRasterCount(hDataset));
-            terms[idx++]    = enif_make_tuple2(env, enif_make_atom(env, "rasterSize"), 
+            terms[idx++] = enif_make_tuple2(env, enif_make_atom(env, "rasterSize"), 
                                                         enif_make_string(env, buf, ERL_NIF_LATIN1));
 
             terms[idx++] = enif_make_tuple2(env, enif_make_atom(env, "rasterCount"),
                                                         enif_make_int(env, GDALGetRasterCount(hDataset)));
 
-            double        adfGeoTransform[6];
+            double adfGeoTransform[6];
             if( GDALGetGeoTransform( hDataset, adfGeoTransform ) == CE_None ) {
-                sprintf(buf, "(%.6f,%.6f)", adfGeoTransform[0], adfGeoTransform[3]);
                 terms[idx++] = enif_make_tuple2(env, enif_make_atom(env, "origin"),
-                                                        enif_make_string(env, buf, ERL_NIF_LATIN1));
+                                                        enif_make_tuple2(env, enif_make_double(env, adfGeoTransform[0]), enif_make_double(env, adfGeoTransform[3])));                                      
 
-                sprintf(buf, "(%.6f,%.6f)", adfGeoTransform[1], adfGeoTransform[5]);
                 terms[idx++] = enif_make_tuple2(env, enif_make_atom(env, "pixelSize"), 
-                                                        enif_make_string(env, buf, ERL_NIF_LATIN1));
+                                                        enif_make_tuple2(env, enif_make_double(env, adfGeoTransform[1]), enif_make_double(env, adfGeoTransform[5])));
             }
 
             if (GDALGetProjectionRef(hDataset) != NULL) {
-                terms[idx++]   = enif_make_tuple2(env, enif_make_atom(env, "projection"), 
+                terms[idx++] = enif_make_tuple2(env, enif_make_atom(env, "projection"), 
                                                         enif_make_string(env, GDALGetProjectionRef(hDataset), ERL_NIF_LATIN1));
-//                return enif_make_list(env, 4, driverMeta, rasterSize, rasterCount, proj);
+            }
+
+            char** fileList = GDALGetFileList(hDataset);
+            if (fileList != NULL) {
+                ERL_NIF_TERM fileTerms[48];
+                int fileIdx = 0;
+                char** files = fileList;
+
+                gdal_priv_data* priv = (gdal_priv_data*)enif_priv_data(env);
+                LOG("start.... count=%d\n", CSLCount(fileList));
+                do {
+                    LOG("file: %p -> %s\n", files, *files);
+                    fileTerms[ fileIdx++ ] = enif_make_string(env, *files, ERL_NIF_LATIN1);
+                } while(*(++files)) ;
+                CSLDestroy(fileList);
+                terms[idx++] = enif_make_tuple2(env, enif_make_atom(env, "fileList"),
+                                                        enif_make_list_from_array(env, fileTerms, fileIdx));
             }
 
             return enif_make_list_from_array(env, terms, idx);
         }
         else {
-            return ATOM_OK;
+            return ATOM_NOT_OPEN;
         }
     }
     else {
@@ -137,11 +166,12 @@ static ErlNifFunc nif_funcs[] =
 
 static void gdal_nifs_resource_cleanup(ErlNifEnv* env, void* arg)
 {
-
+    CLOSE_LOGER();
 }
 
 static int on_load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info)
 {
+    OPEN_LOGER();
     gdal_datasets_RESOURCE = enif_open_resource_type(env, NULL, "gdal_datasets_resource",
                                         &gdal_nifs_resource_cleanup,
                                         ERL_NIF_RT_CREATE | ERL_NIF_RT_TAKEOVER,
@@ -161,6 +191,7 @@ static int on_load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info)
     ATOM_FALSE = enif_make_atom(env, "false");
     ATOM_TRUE = enif_make_atom(env, "true");
     ATOM_OK = enif_make_atom(env, "ok");
+    ATOM_NOT_OPEN = enif_make_atom(env, "not_open");
 
     return 0;
 }
