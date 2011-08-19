@@ -4,6 +4,7 @@ tags
 *.tif
 *.o
 *.so
+*.log
 a.out
 *~
 .DS_Store
