@@ -19,6 +19,7 @@ swne_assert({S1, W1, N1, E1}, {S2, W2, N2, E2}) ->
 
 -endif.
 
+-spec(floor(X::number()) -> integer()).
 floor(X) ->
     T = erlang:trunc(X),
     case (X - T) of
@@ -27,6 +28,7 @@ floor(X) ->
         _ -> T
     end.
 
+-spec(ceiling(X::number()) -> integer()).
 ceiling(X) ->
     T = erlang:trunc(X),
     case (X - T) of

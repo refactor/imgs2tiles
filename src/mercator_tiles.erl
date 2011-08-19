@@ -2,6 +2,7 @@
 
 -export([latlon_to_meters/2, meters_to_latlon/2, meters_to_tile/3, tile_bounds/3, tile_latlon_bounds/3, zoom_for_pixelsize/1]).
 -export([resolution/1]).
+-export([quadtree/3]).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -31,7 +32,7 @@ meters_to_latlon(MX, MY) ->
     {Lat, Lon}.
 
 %% @doc Converts pixel coordinates in given zoom level of pyramid to EPSG:900913
--spec(pixels_to_meters(PX::float(), PY::float(), Zoom::byte()) -> {float(), float()}).
+-spec(pixels_to_meters(PX::non_neg_integer(), PY::non_neg_integer(), Zoom::byte()) -> {float(), float()}).
 pixels_to_meters(PX, PY, Zoom) ->
     Resolution = resolution(Zoom),
     MX = PX * Resolution - ?ORIGIN_SHIFT,
@@ -45,14 +46,14 @@ meters_to_tile(MX, MY, Zoom) ->
     pixels_to_tile(PX, PY).
 
 %% @doc Returns bounds of the given tile in EPSG:900913 coordinates
--spec(tile_bounds(TX::integer(), TY::integer(), Zoom::byte()) -> {float(),float(),float(),float()}).
+-spec(tile_bounds(TX::non_neg_integer(), TY::non_neg_integer(), Zoom::byte()) -> {float(),float(),float(),float()}).
 tile_bounds(TX, TY, Zoom) ->
     {MinX, MinY} = pixels_to_meters(TX * ?TILE_SIZE, TY * ?TILE_SIZE, Zoom),
     {MaxX, MaxY} = pixels_to_meters((TX + 1) * ?TILE_SIZE, (TY + 1) * ?TILE_SIZE, Zoom),
     {MinX, MinY, MaxX, MaxY}.
 
 %% @doc Returns bounds of the given tile in latutude/longitude using WGS84 datum
--spec(tile_latlon_bounds(TX::integer(), TY::integer(), Zoom::byte()) -> {float(),float(),float(),float()}).
+-spec(tile_latlon_bounds(TX::non_neg_integer(), TY::non_neg_integer(), Zoom::byte()) -> {float(),float(),float(),float()}).
 tile_latlon_bounds(TX, TY, Zoom) ->
     {MinX, MinY, MaxX, MaxY} = tile_bounds(TX, TY, Zoom),
     {MinLat, MinLon} = meters_to_latlon(MinX, MinY),
@@ -65,13 +66,43 @@ zoom_for_pixelsize(PixelSize) ->
     zoom_for_pixelsize(PixelSize, 0).
 
 %% @doc Resolution (meters/pixel) for given zoom level (measured at Equator)
+-spec(resolution(Zoom::byte()) -> float()).
 resolution(Zoom) ->
     ?INITIAL_RESOLUTION / math:pow(2, Zoom).
 
+%% @doc Converts TMS tile coordinates to Microsoft QuadTree
+-spec(quadtree(TX::non_neg_integer(), TY::non_neg_integer(), Zoom::byte()) -> string()).
+quadtree(TX, TY, Zoom) ->
+    Ty = trunc(math:pow(2, Zoom) - 1 - TY),
+    quadtree(TX, Ty, Zoom, "").
 
 %% ===================================================================
 %% Inline funcs
 %% ===================================================================
+quadtree(_TX, _TY, 0, Quadtree) -> 
+    Quadtree;
+quadtree(TX, TY, Zoom, Quadtree) -> 
+    Mask = 1 bsl (Zoom - 1),
+    Digit = bit_op(TX, TY, Mask),
+    quadtree(TX, TY, Zoom - 1, Quadtree ++ integer_to_list(Digit)).
+
+bit_op(TX, TY, Mask) ->
+    R1 = 
+    if
+        TX band Mask =/= 0 ->
+            1;
+        true ->
+            0
+    end,
+    R2 =
+    if
+        TY band Mask =/= 0 ->
+            2;
+        true ->
+            0
+    end,
+    R1 + R2.
+
 zoom_for_pixelsize(PixelSize, I) ->
     R = resolution(I),
     if 
@@ -155,5 +186,8 @@ zoom_for_pixelsize_test() ->
     ?assertEqual(20, zoom_for_pixelsize(0.1)),
     ?assertEqual(30, zoom_for_pixelsize(0.0000728964)),
     ?assertEqual(3, zoom_for_pixelsize(10000)).
+
+quadtree_test() ->
+    ?assertEqual("22221", quadtree(1, 1, 5)).
 
 -endif.
