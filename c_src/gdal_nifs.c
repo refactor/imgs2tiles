@@ -55,7 +55,9 @@ ERL_NIF_TERM gdal_nif_open(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
             return enif_make_tuple2(env, ATOM_OK, result);
         }
         else {
-            return enif_make_tuple2(env, ATOM_ERROR, enif_make_string(env, "the file doesn't exist", ERL_NIF_LATIN1));
+            return enif_make_tuple2(env, 
+                        ATOM_ERROR, 
+                        enif_make_string(env, "the file doesn't exist", ERL_NIF_LATIN1));
         }
     }
     else {
@@ -75,7 +77,9 @@ ERL_NIF_TERM gdal_nif_close(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
             return ATOM_OK;
         }
         else {
-            return enif_make_tuple2(env, ATOM_ERROR, enif_make_string(env, "close error", ERL_NIF_LATIN1));
+            return enif_make_tuple2(env, 
+                        ATOM_ERROR, 
+                        enif_make_string(env, "close error", ERL_NIF_LATIN1));
         }
     }
     else {
@@ -91,34 +95,39 @@ ERL_NIF_TERM gdal_nif_get_meta(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv
         GDALDatasetH hDataset = handle->hDataset;
         if (hDataset != NULL) {
             GDALDriverH hDriver = GDALGetDatasetDriver(hDataset);
-            char buf[256];
+
             ERL_NIF_TERM terms[8];
             int idx = 0;
 
-            sprintf(buf, "%s/%s",
-                    GDALGetDriverShortName(hDriver), GDALGetDriverLongName(hDriver));
-            terms[idx++] = enif_make_tuple2(env, enif_make_atom(env, "driver"), enif_make_string(env, buf, ERL_NIF_LATIN1));
+            char buf[256];
+            sprintf(buf, "%s/%s", GDALGetDriverShortName(hDriver), GDALGetDriverLongName(hDriver));
+            terms[idx++] = enif_make_tuple2(env, enif_make_atom(env, "driver"),
+                                    enif_make_string(env, buf, ERL_NIF_LATIN1));
 
-            sprintf(buf, "%dx%dx%d", 
-                    GDALGetRasterXSize(hDataset), GDALGetRasterYSize(hDataset), GDALGetRasterCount(hDataset));
             terms[idx++] = enif_make_tuple2(env, enif_make_atom(env, "rasterSize"), 
-                                                        enif_make_string(env, buf, ERL_NIF_LATIN1));
+                                enif_make_tuple2(env, enif_make_double(env, GDALGetRasterXSize(hDataset)), 
+                                                    enif_make_double(env, GDALGetRasterYSize(hDataset))));
 
             terms[idx++] = enif_make_tuple2(env, enif_make_atom(env, "rasterCount"),
                                                         enif_make_int(env, GDALGetRasterCount(hDataset)));
 
             double adfGeoTransform[6];
             if( GDALGetGeoTransform( hDataset, adfGeoTransform ) == CE_None ) {
-                terms[idx++] = enif_make_tuple2(env, enif_make_atom(env, "origin"),
-                                                        enif_make_tuple2(env, enif_make_double(env, adfGeoTransform[0]), enif_make_double(env, adfGeoTransform[3])));                                      
+                terms[idx++] = enif_make_tuple2(env,enif_make_atom(env, "origin"),
+                                                    enif_make_tuple2(env,
+                                                        enif_make_double(env, adfGeoTransform[0]), 
+                                                        enif_make_double(env, adfGeoTransform[3])));
 
-                terms[idx++] = enif_make_tuple2(env, enif_make_atom(env, "pixelSize"), 
-                                                        enif_make_tuple2(env, enif_make_double(env, adfGeoTransform[1]), enif_make_double(env, adfGeoTransform[5])));
+                terms[idx++] = enif_make_tuple2(env,enif_make_atom(env, "pixelSize"), 
+                                                    enif_make_tuple2(env, 
+                                                        enif_make_double(env, adfGeoTransform[1]), 
+                                                        enif_make_double(env, adfGeoTransform[5])));
             }
 
             if (GDALGetProjectionRef(hDataset) != NULL) {
-                terms[idx++] = enif_make_tuple2(env, enif_make_atom(env, "projection"), 
-                                                        enif_make_string(env, GDALGetProjectionRef(hDataset), ERL_NIF_LATIN1));
+                terms[idx++] = enif_make_tuple2(env,enif_make_atom(env, "projection"), 
+                                                    enif_make_string(env, 
+                                                        GDALGetProjectionRef(hDataset), ERL_NIF_LATIN1));
             }
 
             char** fileList = GDALGetFileList(hDataset);
@@ -134,8 +143,8 @@ ERL_NIF_TERM gdal_nif_get_meta(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv
                     fileTerms[ fileIdx++ ] = enif_make_string(env, *files, ERL_NIF_LATIN1);
                 } while(*(++files)) ;
                 CSLDestroy(fileList);
-                terms[idx++] = enif_make_tuple2(env, enif_make_atom(env, "fileList"),
-                                                        enif_make_list_from_array(env, fileTerms, fileIdx));
+                terms[idx++] = enif_make_tuple2(env,enif_make_atom(env, "fileList"),
+                                                    enif_make_list_from_array(env, fileTerms, fileIdx));
             }
 
             return enif_make_list_from_array(env, terms, idx);
