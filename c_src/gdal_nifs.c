@@ -1,5 +1,6 @@
 #include "erl_nif.h"
 
+#include "ogr_srs_api.h"
 #include "gdal.h"
 #include "cpl_conv.h"
 #include "cpl_string.h"
@@ -23,6 +24,12 @@ typedef struct
 {
     GDALDatasetH inDataset;
     nodata_values* inNodata;
+    char* resampling;
+    
+    OGRSpatialReferenceH in_srs;
+    const char* in_srs_wkt;
+
+    OGRSpatialReferenceH out_srs;
 } gdal_dataset_handle;
 
 typedef struct
@@ -77,6 +84,7 @@ ERL_NIF_TERM gdal_nif_open(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
                                                     sizeof(gdal_dataset_handle));
             memset(handle, '\0', sizeof(*handle));
             handle->inDataset = inDataset;
+            handle->resampling = "average";
 
             // Get NODATA value
             double nodata[3];
@@ -96,6 +104,35 @@ ERL_NIF_TERM gdal_nif_open(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
                 handle->inNodata = ndv;
             }
             LOG("NODATA: count=%d", count);
+
+            const char* in_srs_wkt = GDALGetProjectionRef(inDataset);
+            if (in_srs_wkt == NULL && GDALGetGCPCount(inDataset) != 0) {
+                in_srs_wkt = GDALGetGCPProjection(inDataset);
+                handle->in_srs_wkt = in_srs_wkt;
+            }
+
+            if (in_srs_wkt != NULL) {
+                OGRSpatialReferenceH in_srs = OSRNewSpatialReference(NULL);
+                char* wkt = (char*)in_srs_wkt;
+                OSRImportFromWkt(in_srs, &wkt);
+
+                handle->in_srs = in_srs;
+            }
+
+            OGRSpatialReferenceH out_srs = OSRNewSpatialReference(NULL);
+            OSRImportFromEPSG(out_srs, 900913);
+            handle->out_srs = out_srs;
+
+            double padfTransform[6];
+            double errTransform[6] = {0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
+            GDALGetGeoTransform(handle->inDataset, padfTransform);
+            if (0 == memcmp(padfTransform, errTransform, sizeof(errTransform))
+                     && GDALGetGCPCount(handle->inDataset) == 0) {
+                return enif_make_tuple2(env, ATOM_ERROR,
+                        enif_make_string(env, 
+                            "There is no georeference - neither affine transformation (worldfile) nor GCPs",
+                            ERL_NIF_LATIN1));
+            }
 
             ERL_NIF_TERM result = enif_make_resource(env, handle);
             enif_release_resource(handle);
