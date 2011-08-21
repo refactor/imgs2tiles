@@ -13,9 +13,11 @@ endif
 myos := $(shell uname -s)
 
 ifeq ($(myos),Linux)
-CFLAGS = -shared
+    CFLAGS = -shared
 else
-CFLAGS = -bundle -undefined suppress -flat_namespace
+    ifeq ($(myos),Darwin)
+    CFLAGS = -bundle -undefined suppress -flat_namespace
+    endif
 endif
 
 all: $(objects) $(beams)
