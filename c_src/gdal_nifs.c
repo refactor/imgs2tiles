@@ -1,5 +1,6 @@
 #include "erl_nif.h"
 
+#include "gdalwarper.h"
 #include "ogr_srs_api.h"
 #include "gdal.h"
 #include "cpl_conv.h"
@@ -22,7 +23,10 @@ typedef struct
 
 typedef struct
 {
-    GDALDatasetH inDataset;
+    GDALDatasetH in_ds;     // the original dataset
+    GDALDatasetH out_ds;    // the VRT dataset which warped in_ds for tile projection
+    double out_gt[6];       // GeoTransform for georeference
+
     nodata_values* inNodata;
     char* resampling;
     
@@ -54,9 +58,9 @@ ERL_NIF_TERM gdal_nif_open(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
     if (enif_get_string(env, argv[0], name, sizeof(name), ERL_NIF_LATIN1)) {
         name_sz = strlen(name);
 
-        GDALDatasetH inDataset = GDALOpen(name, GA_ReadOnly);
-        if (inDataset != NULL) {
-            int rasterCount = GDALGetRasterCount(inDataset);
+        GDALDatasetH in_ds = GDALOpen(name, GA_ReadOnly);
+        if (in_ds != NULL) {
+            int rasterCount = GDALGetRasterCount(in_ds);
             if (rasterCount == 0) {
                 const char* msg = "Input file '%s' has no raster band";
                 char errstr[name_sz + strlen(msg) + 1];
@@ -65,7 +69,7 @@ ERL_NIF_TERM gdal_nif_open(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
                         enif_make_string(env, errstr, ERL_NIF_LATIN1));
             }
 
-            GDALRasterBandH hBand = GDALGetRasterBand(inDataset, 1);
+            GDALRasterBandH hBand = GDALGetRasterBand(in_ds, 1);
             if (GDALGetRasterColorTable(hBand) != NULL) {
                 const char* msg = "Please convert this file to RGB/RGBA and run gdal2tiles on the result.\n" 
                     "From paletted file you can create RGBA file (temp.vrt) by:\n"
@@ -83,14 +87,14 @@ ERL_NIF_TERM gdal_nif_open(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
                                                     gdal_datasets_RESOURCE, 
                                                     sizeof(gdal_dataset_handle));
             memset(handle, '\0', sizeof(*handle));
-            handle->inDataset = inDataset;
+            handle->in_ds = in_ds;
             handle->resampling = "average";
 
             // Get NODATA value
             double nodata[3];
             int count = 0;
             for (int i = 1; i <= rasterCount; ++i) {
-                GDALRasterBandH hBand = GDALGetRasterBand(inDataset, i);
+                GDALRasterBandH hBand = GDALGetRasterBand(in_ds, i);
                 int success;
                 double nodataValue = GDALGetRasterNoDataValue(hBand, &success);
                 if (success) {
@@ -105,9 +109,9 @@ ERL_NIF_TERM gdal_nif_open(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
             }
             LOG("NODATA: count=%d", count);
 
-            const char* in_srs_wkt = GDALGetProjectionRef(inDataset);
-            if (in_srs_wkt == NULL && GDALGetGCPCount(inDataset) != 0) {
-                in_srs_wkt = GDALGetGCPProjection(inDataset);
+            const char* in_srs_wkt = GDALGetProjectionRef(in_ds);
+            if (in_srs_wkt == NULL && GDALGetGCPCount(in_ds) != 0) {
+                in_srs_wkt = GDALGetGCPProjection(in_ds);
                 handle->in_srs_wkt = in_srs_wkt;
             }
 
@@ -122,17 +126,24 @@ ERL_NIF_TERM gdal_nif_open(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
             OGRSpatialReferenceH out_srs = OSRNewSpatialReference(NULL);
             OSRImportFromEPSG(out_srs, 900913);
             handle->out_srs = out_srs;
+            char* out_srs_wkt;
+            OSRExportToWkt(out_srs, &out_srs_wkt);
 
             double padfTransform[6];
             double errTransform[6] = {0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
-            GDALGetGeoTransform(handle->inDataset, padfTransform);
+            GDALGetGeoTransform(in_ds, padfTransform);
             if (0 == memcmp(padfTransform, errTransform, sizeof(errTransform))
-                     && GDALGetGCPCount(handle->inDataset) == 0) {
+                     && GDALGetGCPCount(in_ds) == 0) {
                 return enif_make_tuple2(env, ATOM_ERROR,
                         enif_make_string(env, 
                             "There is no georeference - neither affine transformation (worldfile) nor GCPs",
                             ERL_NIF_LATIN1));
             }
+
+            GDALDatasetH out_ds = GDALAutoCreateWarpedVRT(in_ds, in_srs_wkt, out_srs_wkt, GRA_NearestNeighbour, 0.0, NULL);
+            handle->out_ds = out_ds;
+
+            GDALGetGeoTransform(out_ds, handle->out_gt);
 
             ERL_NIF_TERM result = enif_make_resource(env, handle);
             enif_release_resource(handle);
@@ -158,12 +169,12 @@ ERL_NIF_TERM gdal_nif_close(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
     gdal_dataset_handle* handle;
 
     if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
-        GDALDatasetH inDataset = handle->inDataset;
-        if (inDataset != NULL) {
-            GDALClose(inDataset);
-            handle->inDataset = NULL;
+        GDALDatasetH in_ds = handle->in_ds;
+        if (in_ds != NULL) {
+            GDALClose(in_ds);
+            handle->in_ds = NULL;
             if (handle->inNodata != NULL) {
-                free(handle->inDataset);
+                free(handle->in_ds);
             }
             return ATOM_OK;
         }
@@ -183,9 +194,9 @@ ERL_NIF_TERM gdal_nif_get_meta(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv
     gdal_dataset_handle* handle;
 
     if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
-        GDALDatasetH inDataset = handle->inDataset;
-        if (inDataset != NULL) {
-            GDALDriverH hDriver = GDALGetDatasetDriver(inDataset);
+        GDALDatasetH in_ds = handle->in_ds;
+        if (in_ds != NULL) {
+            GDALDriverH hDriver = GDALGetDatasetDriver(in_ds);
 
             ERL_NIF_TERM terms[8];
             int idx = 0;
@@ -196,14 +207,14 @@ ERL_NIF_TERM gdal_nif_get_meta(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv
                                     enif_make_string(env, buf, ERL_NIF_LATIN1));
 
             terms[idx++] = enif_make_tuple2(env, enif_make_atom(env, "rasterSize"), 
-                                enif_make_tuple2(env, enif_make_int(env, GDALGetRasterXSize(inDataset)), 
-                                                    enif_make_int(env, GDALGetRasterYSize(inDataset))));
+                                enif_make_tuple2(env, enif_make_int(env, GDALGetRasterXSize(in_ds)), 
+                                                    enif_make_int(env, GDALGetRasterYSize(in_ds))));
 
             terms[idx++] = enif_make_tuple2(env, enif_make_atom(env, "rasterCount"),
-                                                        enif_make_int(env, GDALGetRasterCount(inDataset)));
+                                                        enif_make_int(env, GDALGetRasterCount(in_ds)));
 
             double adfGeoTransform[6];
-            if( GDALGetGeoTransform( inDataset, adfGeoTransform ) == CE_None ) {
+            if( GDALGetGeoTransform( in_ds, adfGeoTransform ) == CE_None ) {
                 terms[idx++] = enif_make_tuple2(env,enif_make_atom(env, "origin"),
                                                     enif_make_tuple2(env,
                                                         enif_make_double(env, adfGeoTransform[0]), 
@@ -215,13 +226,13 @@ ERL_NIF_TERM gdal_nif_get_meta(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv
                                                         enif_make_double(env, adfGeoTransform[5])));
             }
 
-            if (GDALGetProjectionRef(inDataset) != NULL) {
+            if (GDALGetProjectionRef(in_ds) != NULL) {
                 terms[idx++] = enif_make_tuple2(env,enif_make_atom(env, "projection"), 
                                                     enif_make_string(env, 
-                                                        GDALGetProjectionRef(inDataset), ERL_NIF_LATIN1));
+                                                        GDALGetProjectionRef(in_ds), ERL_NIF_LATIN1));
             }
 
-            char** fileList = GDALGetFileList(inDataset);
+            char** fileList = GDALGetFileList(in_ds);
             if (fileList != NULL) {
                 ERL_NIF_TERM fileTerms[16];
                 int fileIdx = 0;
@@ -237,6 +248,16 @@ ERL_NIF_TERM gdal_nif_get_meta(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv
                 terms[idx++] = enif_make_tuple2(env,enif_make_atom(env, "fileList"),
                                                     enif_make_list_from_array(env, fileTerms, fileIdx));
             }
+
+            terms[idx++] = enif_make_tuple2(env, enif_make_atom(env, "warpingGeoTransform"), 
+                                                    enif_make_list6(env, 
+                                                        enif_make_double(env, handle->out_gt[0]),
+                                                        enif_make_double(env, handle->out_gt[1]),
+                                                        enif_make_double(env, handle->out_gt[2]),
+                                                        enif_make_double(env, handle->out_gt[3]),
+                                                        enif_make_double(env, handle->out_gt[4]),
+                                                        enif_make_double(env, handle->out_gt[5])
+                                                        ));
 
             return enif_make_list_from_array(env, terms, idx);
         }
