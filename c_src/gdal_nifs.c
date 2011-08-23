@@ -27,6 +27,12 @@ typedef struct
     GDALDatasetH out_ds;    // the VRT dataset which warped in_ds for tile projection
     double out_gt[6];       // warp GeoTransform for georeference
 
+    // Output Bounds - coordinates in th output SRS
+    double ominx;
+    double omaxx;
+    double omaxy;
+    double ominy;
+
     nodata_values* inNodata;
     char* resampling;
     
@@ -34,6 +40,7 @@ typedef struct
     const char* in_srs_wkt;
 
     OGRSpatialReferenceH out_srs;
+    const char* out_srs_wkt;
 } gdal_dataset_handle;
 
 typedef struct
@@ -53,7 +60,7 @@ static ERL_NIF_TERM ATOM_OK;
 
 static void destroy_handle(gdal_dataset_handle* handle);
 
-ERL_NIF_TERM gdal_nif_open(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+ERL_NIF_TERM gdal_nif_open_img(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     char name[4096];
     size_t name_sz;
@@ -99,52 +106,11 @@ ERL_NIF_TERM gdal_nif_open(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
                                         enif_make_string(env, errstr, ERL_NIF_LATIN1));
             }
 
-            // Get NODATA value
-            double nodata[3];
-            int count = 0;
-            for (int i = 1; i <= rasterCount; ++i) {
-                GDALRasterBandH hBand = GDALGetRasterBand(in_ds, i);
-                int success;
-                double nodataValue = GDALGetRasterNoDataValue(hBand, &success);
-                if (success) {
-                    nodata[ count++ ] = nodataValue;
-                }
-            }
-
-            nodata_values *ndv = NULL;
-            if (count > 0) {
-                ndv = malloc(sizeof(*ndv) + count * sizeof(double));
-                ndv->len = count;
-                memcpy(ndv->values, nodata, count * sizeof(double));
-            }
-            handle->inNodata = ndv;
-            LOG("NODATA: count=%d", count);
-
-            const char* in_srs_wkt = GDALGetProjectionRef(in_ds);
-            if (in_srs_wkt == NULL && GDALGetGCPCount(in_ds) != 0) {
-                in_srs_wkt = GDALGetGCPProjection(in_ds);
-            }
-            handle->in_srs_wkt = in_srs_wkt;
-
-            OGRSpatialReferenceH in_srs = OSRNewSpatialReference(NULL);
-            if (in_srs_wkt != NULL) {
-                char* wkt = (char*)in_srs_wkt;
-                OSRImportFromWkt(in_srs, &wkt);
-            }
-            handle->in_srs = in_srs;
-
-            OGRSpatialReferenceH out_srs = OSRNewSpatialReference(NULL);
-            OSRImportFromEPSG(out_srs, 900913);
-            char* out_srs_wkt;
-            OSRExportToWkt(out_srs, &out_srs_wkt);
-            handle->out_srs = out_srs;
-
             double padfTransform[6];
             double errTransform[6] = {0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
             GDALGetGeoTransform(in_ds, padfTransform);
             if (0 == memcmp(padfTransform, errTransform, sizeof(errTransform))
                      && GDALGetGCPCount(in_ds) == 0) {
-
                 destroy_handle(handle);
                 return enif_make_tuple2(env, 
                                         ATOM_ERROR,
@@ -152,20 +118,6 @@ ERL_NIF_TERM gdal_nif_open(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
                                             "There is no georeference - neither affine transformation (worldfile) nor GCPs",
                                             ERL_NIF_LATIN1));
             }
-
-            GDALDatasetH out_ds = GDALAutoCreateWarpedVRT(in_ds, in_srs_wkt, out_srs_wkt, GRA_NearestNeighbour, 0.0, NULL);
-            handle->out_ds = out_ds;
-
-            GDALGetGeoTransform(out_ds, padfTransform);
-            if (padfTransform[2] != 0.0 && padfTransform[4] != 0.0) {
-                destroy_handle(handle);
-                return enif_make_tuple2(env, 
-                                        ATOM_ERROR,
-                                        enif_make_string(env, 
-                                            "Georeference of the raster contains rotation or skew. Such raster is not supported. Please use gdalwarp first",
-                                            ERL_NIF_LATIN1));
-            }
-            memcpy(handle->out_gt, padfTransform, sizeof(padfTransform));
 
             ERL_NIF_TERM result = enif_make_resource(env, handle);
             enif_release_resource(handle);
@@ -186,14 +138,102 @@ ERL_NIF_TERM gdal_nif_open(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
     }
 }
 
-ERL_NIF_TERM gdal_nif_close(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM gdal_nif_calc_nodatavalue(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    gdal_dataset_handle* handle = NULL;
-
+    LOG("gdal_nif_calc_nodatavalue is calling");
+    gdal_dataset_handle* handle;
     if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
-        if (handle != NULL) {
-            destroy_handle(handle);
+        // Get NODATA value
+        double nodata[3];
+        int count = 0;
+        int rasterCount = GDALGetRasterCount(handle->in_ds);
+        for (int i = 1; i <= rasterCount; ++i) {
+            GDALRasterBandH hBand = GDALGetRasterBand(handle->in_ds, i);
+            int success;
+            double nodataValue = GDALGetRasterNoDataValue(hBand, &success);
+            if (success) {
+                nodata[ count++ ] = nodataValue;
+            }
         }
+
+        nodata_values *ndv = NULL;
+        if (count > 0) {
+            ndv = malloc(sizeof(*ndv) + count * sizeof(double));
+            ndv->len = count;
+            memcpy(ndv->values, nodata, count * sizeof(double));
+        }
+        handle->inNodata = ndv;
+
+        LOG("NODATA: count=%d", count);
+        return ATOM_OK;
+    }
+    else {
+        return enif_make_badarg(env);
+    }
+}
+
+static ERL_NIF_TERM gdal_nif_warp_dataset(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    LOG("gdal_nif_warp_dataset is calling");
+    gdal_dataset_handle* handle;
+    if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
+        GDALDatasetH out_ds = GDALAutoCreateWarpedVRT(handle->in_ds, 
+                                                      handle->in_srs_wkt, 
+                                                      handle->out_srs_wkt, 
+                                                      GRA_NearestNeighbour, 
+                                                      0.0, 
+                                                      NULL);
+        handle->out_ds = out_ds;
+
+        double padfTransform[6];
+        GDALGetGeoTransform(out_ds, padfTransform);
+        if (padfTransform[2] != 0.0 && padfTransform[4] != 0.0) {
+            destroy_handle(handle);
+            return enif_make_tuple2(env, 
+                                    ATOM_ERROR,
+                                    enif_make_string(env, 
+                                        "Georeference of the raster contains rotation or skew. Such raster is not supported. Please use gdalwarp first",
+                                        ERL_NIF_LATIN1));
+        }
+        memcpy(handle->out_gt, padfTransform, sizeof(padfTransform));
+
+        handle->ominx = padfTransform[0];
+        handle->omaxx = padfTransform[0] + GDALGetRasterXSize(out_ds) * padfTransform[1];
+        handle->omaxy = padfTransform[3];
+        handle->ominy = padfTransform[3] + GDALGetRasterYSize(out_ds) * padfTransform[5];
+
+        return ATOM_OK;
+    }
+    else {
+        return enif_make_badarg(env);
+    }
+}
+
+static ERL_NIF_TERM gdal_nif_calc_srs(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    LOG("gdal_nif_calc_srs is calling");
+    gdal_dataset_handle* handle;
+    if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
+        const char* in_srs_wkt = GDALGetProjectionRef(handle->in_ds);
+        if (in_srs_wkt == NULL && GDALGetGCPCount(handle->in_ds) != 0) {
+            in_srs_wkt = GDALGetGCPProjection(handle->in_ds);
+        }
+        handle->in_srs_wkt = in_srs_wkt;
+
+        OGRSpatialReferenceH in_srs = OSRNewSpatialReference(NULL);
+        if (in_srs_wkt != NULL) {
+            char* wkt = (char*)in_srs_wkt;
+            OSRImportFromWkt(in_srs, &wkt);
+        }
+        handle->in_srs = in_srs;
+
+        OGRSpatialReferenceH out_srs = OSRNewSpatialReference(NULL);
+        OSRImportFromEPSG(out_srs, 900913);
+        char* out_srs_wkt;
+        OSRExportToWkt(out_srs, &out_srs_wkt);
+        handle->out_srs = out_srs;
+        handle->out_srs_wkt = out_srs_wkt;
+
         return ATOM_OK;
     }
     else {
@@ -214,11 +254,15 @@ ERL_NIF_TERM gdal_nif_get_meta(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv
             ERL_NIF_TERM terms[8];
             int idx = 0;
 
+            terms[idx++] = enif_make_tuple2(env,
+                                            enif_make_atom(env, "description"),
+                                            enif_make_string(env, GDALGetDescription(in_ds), ERL_NIF_LATIN1));
+
             char buf[256];
             sprintf(buf, "%s/%s", GDALGetDriverShortName(hDriver), GDALGetDriverLongName(hDriver));
             terms[idx++] = enif_make_tuple2(env, 
                                             enif_make_atom(env, "driver"),
-                                                enif_make_string(env, buf, ERL_NIF_LATIN1));
+                                            enif_make_string(env, buf, ERL_NIF_LATIN1));
 
             terms[idx++] = enif_make_tuple2(env, 
                                             enif_make_atom(env, "rasterSize"), 
@@ -278,8 +322,16 @@ ERL_NIF_TERM gdal_nif_get_meta(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv
                                                 enif_make_double(env, handle->out_gt[2]),
                                                 enif_make_double(env, handle->out_gt[3]),
                                                 enif_make_double(env, handle->out_gt[4]),
-                                                enif_make_double(env, handle->out_gt[5])
-                                            ));
+                                                enif_make_double(env, handle->out_gt[5])));
+
+            terms[idx++] = enif_make_tuple2(env,
+                                            enif_make_atom(env, "outBound"),
+                                            enif_make_list4(env,
+                                                enif_make_double(env, handle->ominx),
+                                                enif_make_double(env, handle->omaxx),
+                                                enif_make_double(env, handle->ominy),
+                                                enif_make_double(env, handle->omaxy)));
+            LOG("bounds (output srs: %f, %f, %f, %f", handle->ominx, handle->ominy, handle->omaxx, handle->omaxy);
 
             return enif_make_list_from_array(env, terms, idx);
         }
@@ -292,55 +344,76 @@ ERL_NIF_TERM gdal_nif_get_meta(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv
     }
 }
 
-static void destroy_handle(gdal_dataset_handle* handle) {
+ERL_NIF_TERM gdal_nif_close(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    gdal_dataset_handle* handle = NULL;
+    if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
+        if (handle != NULL) {
+            destroy_handle(handle);
+        }
+        return ATOM_OK;
+    }
+    else {
+        return enif_make_badarg(env);
+    }
+}
+
+static void close_resource(gdal_dataset_handle* handle) {
+    LOG("close resource for %p", handle);
     if (handle->in_srs != NULL) {
+        LOG("destringing in_srs: %p", handle->in_srs);
         OSRDestroySpatialReference(handle->in_srs);
         handle->in_srs = NULL;
-        LOG("destroy in_srs");
     }
     
     if (handle->out_srs != NULL) {
+        LOG("destringing out_srs: %p", handle->out_srs);
         OSRDestroySpatialReference(handle->out_srs);
         handle->out_srs = NULL;
-        LOG("destroy out_srs");
     }
 
     if (handle->in_ds != NULL) {
+        LOG("close in_ds: %p", handle->in_ds);
         GDALClose(handle->in_ds);
         handle->in_ds = NULL;
-        LOG("close in_ds");
     }
 
     if (handle->out_ds != NULL) {
+        LOG("close out_ds: %p", handle->out_ds);
         GDALClose(handle->out_ds);
         handle->out_ds = NULL;
-        LOG("close out_ds");
     }
 
     if (handle->inNodata != NULL) {
+        LOG("free inNodata: %p", handle->inNodata);
         free(handle->inNodata);
         handle->inNodata = NULL;
-        LOG("free nodatavalue");
     }
 
+    LOG("resource closed ");
+}
+
+static void destroy_handle(gdal_dataset_handle* handle) {
+    close_resource(handle);
     enif_release_resource(handle);
-    LOG("resource released ");
 }
 
 static ErlNifFunc nif_funcs[] = 
 {
-    {"open", 1, gdal_nif_open},
+    {"open_img", 1, gdal_nif_open_img},
+    {"calc_nodatavalue", 1, gdal_nif_calc_nodatavalue},
+    {"calc_srs", 1, gdal_nif_calc_srs},
+    {"warp_dataset", 1, gdal_nif_warp_dataset},
     {"get_meta", 1, gdal_nif_get_meta},
     {"close", 1, gdal_nif_close}
 };
 
 static void gdal_nifs_resource_cleanup(ErlNifEnv* env, void* arg)
 {
+    LOG("resource cleaning for %p", arg);
     gdal_dataset_handle* handle = (gdal_dataset_handle*)arg;
-    destroy_handle(handle);
-    LOG("gdal_nifs_resource_cleanup ed");
+    close_resource(handle);
 
-    CLOSE_LOGER();
 }
 
 static int on_load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info)
@@ -379,4 +452,9 @@ static int on_load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info)
     return 0;
 }
 
-ERL_NIF_INIT(gdal_nifs, nif_funcs, &on_load, NULL, NULL, NULL);
+static void on_unload(ErlNifEnv* env, void* priv_data)
+{
+    CLOSE_LOGER();
+}
+
+ERL_NIF_INIT(gdal_nifs, nif_funcs, &on_load, NULL, NULL, &on_unload);
