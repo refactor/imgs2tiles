@@ -203,7 +203,7 @@ ERL_NIF_TERM gdal_nif_close(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 
 ERL_NIF_TERM gdal_nif_get_meta(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    LOG("gdal_nif_get_meta is calling", "");
+    LOG("gdal_nif_get_meta is calling");
     gdal_dataset_handle* handle;
 
     if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
@@ -296,35 +296,35 @@ static void destroy_handle(gdal_dataset_handle* handle) {
     if (handle->in_srs != NULL) {
         OSRDestroySpatialReference(handle->in_srs);
         handle->in_srs = NULL;
-        LOG("destroy in_srs", "");
+        LOG("destroy in_srs");
     }
     
     if (handle->out_srs != NULL) {
         OSRDestroySpatialReference(handle->out_srs);
         handle->out_srs = NULL;
-        LOG("destroy out_srs", "");
+        LOG("destroy out_srs");
     }
 
     if (handle->in_ds != NULL) {
         GDALClose(handle->in_ds);
         handle->in_ds = NULL;
-        LOG("close in_ds", "");
+        LOG("close in_ds");
     }
 
     if (handle->out_ds != NULL) {
         GDALClose(handle->out_ds);
         handle->out_ds = NULL;
-        LOG("close out_ds", "");
+        LOG("close out_ds");
     }
 
     if (handle->inNodata != NULL) {
         free(handle->inNodata);
         handle->inNodata = NULL;
-        LOG("free nodatavalue", "");
+        LOG("free nodatavalue");
     }
 
     enif_release_resource(handle);
-    LOG("resource released ", "");
+    LOG("resource released ");
 }
 
 static ErlNifFunc nif_funcs[] = 
@@ -338,7 +338,7 @@ static void gdal_nifs_resource_cleanup(ErlNifEnv* env, void* arg)
 {
     gdal_dataset_handle* handle = (gdal_dataset_handle*)arg;
     destroy_handle(handle);
-    LOG("gdal_nifs_resource_cleanup ed", "");
+    LOG("gdal_nifs_resource_cleanup ed");
 
     CLOSE_LOGER();
 }
@@ -365,7 +365,7 @@ static int on_load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info)
         LOG("The '%s' driver was not found, is it available in this GDAL build?", priv->tiledriver);
     }
     if (priv->hMemDriver == NULL) {
-        LOG("The 'MEM' driver was not found, is it available in this GDAL build?", "");
+        LOG("The 'MEM' driver was not found, is it available in this GDAL build?");
     }
 
     // Initialize atoms that we use throughout the NIF.
