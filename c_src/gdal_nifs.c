@@ -243,7 +243,7 @@ static ERL_NIF_TERM gdal_nif_calc_srs(ErlNifEnv* env, int argc, const ERL_NIF_TE
 
 ERL_NIF_TERM gdal_nif_get_bound(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    LOG("gdal_nif_get_meta is calling");
+    LOG("gdal_nif_get_bound is calling");
     gdal_dataset_handle* handle;
 
     if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
@@ -262,7 +262,7 @@ ERL_NIF_TERM gdal_nif_get_bound(ErlNifEnv* env, int argc, const ERL_NIF_TERM arg
 
 ERL_NIF_TERM gdal_nif_get_origin(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    LOG("gdal_nif_get_meta is calling");
+    LOG("gdal_nif_get_origin is calling");
     gdal_dataset_handle* handle;
 
     if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
@@ -279,7 +279,7 @@ ERL_NIF_TERM gdal_nif_get_origin(ErlNifEnv* env, int argc, const ERL_NIF_TERM ar
 
 ERL_NIF_TERM gdal_nif_get_pixelsize(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    LOG("gdal_nif_get_meta is calling");
+    LOG("gdal_nif_get_pixelsize is calling");
     gdal_dataset_handle* handle;
 
     if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
@@ -296,7 +296,7 @@ ERL_NIF_TERM gdal_nif_get_pixelsize(ErlNifEnv* env, int argc, const ERL_NIF_TERM
 
 ERL_NIF_TERM gdal_nif_get_rastersize(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    LOG("gdal_nif_get_meta is calling");
+    LOG("gdal_nif_get_rastersize is calling");
     gdal_dataset_handle* handle;
 
     if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
