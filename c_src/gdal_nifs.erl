@@ -6,6 +6,7 @@
 -export([get_meta/1]).
 -export([get_bound/1, get_pixelsize/1, get_rastersize/1, get_origin/1]).
 -export([calc_zoomlevel_range/1, calc_swne/1, calc_tminmax/1]).
+-export([geo_query/2]).
 
 -on_load(init/0).
 
@@ -28,6 +29,18 @@ close(Ref) ->
 
 get_meta(Ref) ->
     erlang:error(function_clause, ["NIF library not loaded",Ref]).
+
+%% @doc For given dataset and query in cartographic coordinates returns parameters for ReadRaster() in raster coordinates and
+%% x/y shifts (for border tiles). If the querysize is not given, the extent is returned in the native resolution of dataset ds.
+%%
+%% {LeftTopX, LeftTopY, RightBottomX, RightBottomY} = Bound
+geo_query(Ref, Bound) ->
+    {ok, {OriginX, OriginY}} = get_origin(Ref),
+    {ok, {PixelSizeX, PixelSizeY}} = get_pixelsize(Ref),
+    {ok, {RasterXSize, RasterYSize}} = get_rastersize(Ref),
+    mercator_tiles:geo_query({OriginX, OriginY, PixelSizeX, PixelSizeY}, {RasterXSize, RasterYSize}, Bound).
+
+
 
 %% ---------------------------------------------------
 %% private function
