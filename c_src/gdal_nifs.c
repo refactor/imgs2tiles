@@ -267,10 +267,8 @@ ERL_NIF_TERM gdal_nif_get_origin(ErlNifEnv* env, int argc, const ERL_NIF_TERM ar
 
     if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
         return enif_make_tuple2(env, 
-                                ATOM_OK,
-                                enif_make_tuple2(env, 
-                                    enif_make_double(env, handle->out_gt[0]), 
-                                    enif_make_double(env, handle->out_gt[3])));
+                                enif_make_double(env, handle->out_gt[0]), 
+                                enif_make_double(env, handle->out_gt[3]));
     }
     else {
         return enif_make_badarg(env);
@@ -284,10 +282,8 @@ ERL_NIF_TERM gdal_nif_get_pixelsize(ErlNifEnv* env, int argc, const ERL_NIF_TERM
 
     if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
         return enif_make_tuple2(env, 
-                                ATOM_OK,
-                                enif_make_tuple2(env, 
-                                    enif_make_double(env, handle->out_gt[1]), 
-                                    enif_make_double(env, handle->out_gt[5])));
+                                enif_make_double(env, handle->out_gt[1]), 
+                                enif_make_double(env, handle->out_gt[5]));
     }
     else {
         return enif_make_badarg(env);
@@ -301,10 +297,8 @@ ERL_NIF_TERM gdal_nif_get_rastersize(ErlNifEnv* env, int argc, const ERL_NIF_TER
 
     if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
         return enif_make_tuple2(env, 
-                                ATOM_OK,
-                                enif_make_tuple2(env, 
-                                                 enif_make_int(env, GDALGetRasterXSize(handle->in_ds)), 
-                                                 enif_make_int(env, GDALGetRasterYSize(handle->in_ds))));
+                                enif_make_int(env, GDALGetRasterXSize(handle->in_ds)), 
+                                enif_make_int(env, GDALGetRasterYSize(handle->in_ds)));
     }
     else {
         return enif_make_badarg(env);

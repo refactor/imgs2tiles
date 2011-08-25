@@ -35,9 +35,9 @@ get_meta(Ref) ->
 %%
 %% {LeftTopX, LeftTopY, RightBottomX, RightBottomY} = Bound
 geo_query(Ref, Bound) ->
-    {ok, {OriginX, OriginY}} = get_origin(Ref),
-    {ok, {PixelSizeX, PixelSizeY}} = get_pixelsize(Ref),
-    {ok, {RasterXSize, RasterYSize}} = get_rastersize(Ref),
+    {OriginX, OriginY} = get_origin(Ref),
+    {PixelSizeX, PixelSizeY} = get_pixelsize(Ref),
+    {RasterXSize, RasterYSize} = get_rastersize(Ref),
     mercator_tiles:geo_query({OriginX, OriginY, PixelSizeX, PixelSizeY}, {RasterXSize, RasterYSize}, Bound).
 
 
@@ -67,8 +67,8 @@ calc_tminmax({Ominx, Ominy, Omaxx, Omaxy} = Bound, Tminmax, Zoom) ->
 %% minimal zoom level: map covers area equivalent to one tile
 %% maximal zoom level: closest possible zoom level up on the resolution of raster
 calc_zoomlevel_range(Ref) ->
-    {ok, {RasterXSize, RasterYSize}} = get_rastersize(Ref),
-    {ok, {PixelXSize, _PixelYSize}} = get_pixelsize(Ref),
+    {RasterXSize, RasterYSize} = get_rastersize(Ref),
+    {PixelXSize, _PixelYSize} = get_pixelsize(Ref),
     Tminz = mercator_tiles:zoom_for_pixelsize( PixelXSize * max( RasterXSize, RasterYSize) / 256 ),
     Tmaxz = mercator_tiles:zoom_for_pixelsize( PixelXSize ),
     {ok, {Tminz, Tmaxz}}.
