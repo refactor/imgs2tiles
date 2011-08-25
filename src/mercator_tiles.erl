@@ -84,15 +84,16 @@ geo_query({OriginX, OriginY, PixelSizeX, PixelSizeY} =_OP, {RasterXSize, RasterY
     Rxsize = trunc( (Lrx - Ulx) / PixelSizeX + 0.5),
     Rysize = trunc( (Lry - Uly) / PixelSizeY + 0.5),
 
-    % Coordinates should not go out of the bounds of the raster
     {NewRx, NewWx, ResWxsize, ResRxsize} = adjust_byedge(Rx, Rxsize, RasterXSize),
     {NewRy, NewWy, ResWysize, ResRysize} = adjust_byedge(Ry, Rysize, RasterYSize),
 
     {{NewRx, NewRy, ResRxsize, ResRysize}, {NewWx, NewWy, ResWxsize, ResWysize}}.
 
 %% ===================================================================
-%% Inline funcs
+%% private funcs
 %% ===================================================================
+
+%% @doc Coordinates should not go out of the bounds of the raster
 adjust_byedge(R, Rsize, RasterSize) ->
     {NewR, NewW, NewWsize, NewRsize} = 
         if R < 0 ->
