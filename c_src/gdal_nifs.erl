@@ -4,7 +4,7 @@
 -export([open/1,
         close/1]).
 -export([get_meta/1]).
--export([get_bound/1, get_pixelsize/1, get_rastersize/1]).
+-export([get_bound/1, get_pixelsize/1, get_rastersize/1, get_origin/1]).
 -export([calc_zoomlevel_range/1, calc_swne/1, calc_tminmax/1]).
 
 -on_load(init/0).
@@ -72,6 +72,9 @@ calc_swne(Ref) ->
 
 %% @doc Bounds in meters
 get_bound(Ref) ->
+    erlang:error(function_clause, ["NIF library not loaded",Ref]).
+
+get_origin(Ref) ->
     erlang:error(function_clause, ["NIF library not loaded",Ref]).
 
 get_pixelsize(Ref) ->

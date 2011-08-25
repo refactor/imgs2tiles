@@ -260,6 +260,23 @@ ERL_NIF_TERM gdal_nif_get_bound(ErlNifEnv* env, int argc, const ERL_NIF_TERM arg
     }
 }
 
+ERL_NIF_TERM gdal_nif_get_origin(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    LOG("gdal_nif_get_meta is calling");
+    gdal_dataset_handle* handle;
+
+    if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
+        return enif_make_tuple2(env, 
+                                ATOM_OK,
+                                enif_make_tuple2(env, 
+                                    enif_make_double(env, handle->out_gt[0]), 
+                                    enif_make_double(env, handle->out_gt[3])));
+    }
+    else {
+        return enif_make_badarg(env);
+    }
+}
+
 ERL_NIF_TERM gdal_nif_get_pixelsize(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     LOG("gdal_nif_get_meta is calling");
@@ -459,6 +476,7 @@ static ErlNifFunc nif_funcs[] =
     {"warp_dataset", 1, gdal_nif_warp_dataset},
     {"get_bound", 1, gdal_nif_get_bound},
     {"get_meta", 1, gdal_nif_get_meta},
+    {"get_origin", 1, gdal_nif_get_origin},
     {"get_pixelsize", 1, gdal_nif_get_pixelsize},
     {"get_rastersize", 1, gdal_nif_get_rastersize},
     {"close", 1, gdal_nif_close}
