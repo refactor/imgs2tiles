@@ -78,6 +78,8 @@ quadtree(TX, TY, Zoom) ->
     quadtree(TX, Ty, Zoom, "").
 
 %% {LeftTopX, LeftTopY, RightBottomX, RightBottomY} = _Bound
+-spec geo_query({float(), float(), integer(), integer()}, {integer(), integer()}, {float(), float(), float(), float()}) ->
+    {{integer(), integer(), integer(), integer()}, {integer(), integer(), integer(), integer()}}.
 geo_query({OriginX, OriginY, PixelSizeX, PixelSizeY} =_OP, {RasterXSize, RasterYSize} =_RS, {Ulx, Uly, Lrx, Lry} = _Bound) ->
     Rx = trunc( (Ulx - OriginX) / PixelSizeX + 0.001),
     Ry = trunc( (Uly - OriginY) / PixelSizeY + 0.001),
@@ -94,6 +96,7 @@ geo_query({OriginX, OriginY, PixelSizeX, PixelSizeY} =_OP, {RasterXSize, RasterY
 %% ===================================================================
 
 %% @doc Coordinates should not go out of the bounds of the raster
+-spec adjust_byedge(integer(), integer(), integer()) -> {integer(), integer(), integer(), integer()}.
 adjust_byedge(R, Rsize, RasterSize) ->
     {NewR, NewW, NewWsize, NewRsize} = 
         if R < 0 ->

@@ -53,6 +53,7 @@ typedef struct
 // Atoms (initialized in on_load)
 static ERL_NIF_TERM ATOM_ALLOCATION_ERROR;
 static ERL_NIF_TERM ATOM_ERROR;
+static ERL_NIF_TERM ATOM_NOT_FOUND;
 static ERL_NIF_TERM ATOM_NOT_OPEN;
 static ERL_NIF_TERM ATOM_FALSE;
 static ERL_NIF_TERM ATOM_TRUE;
@@ -247,13 +248,11 @@ ERL_NIF_TERM gdal_nif_get_bound(ErlNifEnv* env, int argc, const ERL_NIF_TERM arg
     gdal_dataset_handle* handle;
 
     if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
-        return enif_make_tuple2(env, 
-                                ATOM_OK,
-                                enif_make_tuple4(env,
-                                                 enif_make_double(env, handle->ominx),
-                                                 enif_make_double(env, handle->ominy),
-                                                 enif_make_double(env, handle->omaxx),
-                                                 enif_make_double(env, handle->omaxy)));
+        return enif_make_tuple4(env,
+                                enif_make_double(env, handle->ominx),
+                                enif_make_double(env, handle->ominy),
+                                enif_make_double(env, handle->omaxx),
+                                enif_make_double(env, handle->omaxy));
     }
     else {
         return enif_make_badarg(env);
@@ -516,6 +515,7 @@ static int on_load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info)
     ATOM_TRUE = enif_make_atom(env, "true");
     ATOM_OK = enif_make_atom(env, "ok");
     ATOM_NOT_OPEN = enif_make_atom(env, "not_open");
+    ATOM_NOT_FOUND = enif_make_atom(env, "not_found");
 
     return 0;
 }

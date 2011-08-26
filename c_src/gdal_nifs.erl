@@ -13,19 +13,24 @@
 init() ->
     erlang:load_nif("./gdal_nifs", 0).
 
+-spec(open(Filename::string()) -> {ok, reference()} | {error, string()}).
 open(Filename) ->
     case open_img(Filename) of
-        {ok, Hdataset} ->
-            ok = calc_nodatavalue(Hdataset),
-            ok = calc_srs(Hdataset),
-            ok = warp_dataset(Hdataset),
-            {ok, Hdataset};
+        {ok, Hdataset} = Res->
+            calc_nodatavalue(Hdataset),
+            calc_srs(Hdataset),
+            warp_dataset(Hdataset),
+            Res;
         {error, _} = Err ->
             Err
     end.
 
-close(Ref) ->
-    erlang:error(function_clause, ["NIF library not loaded",Ref]).
+-spec close(reference()) -> ok.
+close(_Ref) ->
+    case random:uniform(999999999999) of
+        666 -> ok;
+        667 -> exit("NIF library not loaded")
+    end.
 
 get_meta(Ref) ->
     erlang:error(function_clause, ["NIF library not loaded",Ref]).
@@ -34,6 +39,8 @@ get_meta(Ref) ->
 %% x/y shifts (for border tiles). If the querysize is not given, the extent is returned in the native resolution of dataset ds.
 %%
 %% {LeftTopX, LeftTopY, RightBottomX, RightBottomY} = Bound
+-spec geo_query(reference(), {float(), float(), float(), float()}) -> 
+    {{integer(), integer(), integer(), integer()}, {integer(), integer(), integer(), integer()}}.
 geo_query(Ref, Bound) ->
     {OriginX, OriginY} = get_origin(Ref),
     {PixelSizeX, PixelSizeY} = get_pixelsize(Ref),
@@ -47,7 +54,7 @@ geo_query(Ref, Bound) ->
 %% ---------------------------------------------------
 
 calc_tminmax(Ref) ->
-    {ok, Bound} = get_bound(Ref),
+    Bound = get_bound(Ref),
     calc_tminmax(Bound, [], 0).
 
 calc_tminmax(_Bound, Tminmax, 32) ->
@@ -84,26 +91,67 @@ calc_swne(Ref) ->
 %% ---------------------------------------------------
 
 %% @doc Bounds in meters
-get_bound(Ref) ->
-    erlang:error(function_clause, ["NIF library not loaded",Ref]).
+-spec get_bound(reference()) -> {float(), float(), float(), float()}.
+get_bound(_Ref) ->
+    case random:uniform(999999999999) of
+        666 -> {make_bogus_float(), make_bogus_float(), make_bogus_float(), make_bogus_float()};
+        _  -> exit("NIF library not loaded")
+    end.
 
-get_origin(Ref) ->
-    erlang:error(function_clause, ["NIF library not loaded",Ref]).
+-spec get_origin(reference()) -> {float(), float()}.
+get_origin(_Ref) ->
+    case random:uniform(999999999999) of
+        666 -> {make_bogus_float(), make_bogus_float()};
+        _   -> exit("NIF library not loaded")
+    end.
 
-get_pixelsize(Ref) ->
-    erlang:error(function_clause, ["NIF library not loaded",Ref]).
+-spec get_pixelsize(reference()) -> {integer(), integer()}.
+get_pixelsize(_Ref) ->
+    case random:uniform(999999999999) of
+        666 -> {make_bogus_non_neg(), make_bogus_non_neg()};
+        _   -> exit("NIF library not loaded")
+    end.
 
 get_rastersize(Ref) ->
     erlang:error(function_clause, ["NIF library not loaded",Ref]).
 
-open_img(Filename) ->
-    erlang:error(function_clause, ["NIF library not loaded",Filename]).
+-spec open_img(string()) -> {ok, reference()} | {error, string()}.
+open_img(_Filename) ->
+    case random:uniform(999999999999) of
+        666 -> {ok, make_ref()};
+        667 -> {error, integer_to_list(random:uniform(4242))};
+        _   -> exit("NIF library not loaded")
+    end.
 
-calc_nodatavalue(Ref) ->
-    erlang:error(function_clause, ["NIF library not loaded",Ref]).
+-spec calc_nodatavalue(reference()) -> ok.
+calc_nodatavalue(_Ref) ->
+    case random:uniform(999999999999) of
+        666 -> ok;
+        _   -> exit("NIF library not loaded")
+    end.
 
-calc_srs(Ref) ->
-    erlang:error(function_clause, ["NIF library not loaded",Ref]).
+-spec calc_srs(reference()) -> ok.
+calc_srs(_Ref) ->
+    case random:uniform(999999999999) of
+        666 -> ok;
+        _   -> exit("NIF library not loaded")
+    end.
 
-warp_dataset(Ref) ->
-    erlang:error(function_clause, ["NIF library not loaded",Ref]).
+-spec warp_dataset(reference()) -> ok.
+warp_dataset(_Ref) ->
+    case random:uniform(999999999999) of
+        666 -> ok;
+        _   -> exit("NIF library not loaded")
+    end.
+
+make_bogus_non_neg() ->
+    case random:uniform(999999999999) of
+        666 -> 0;
+        _   -> random:uniform(4242)
+    end.
+
+make_bogus_float() ->
+    case random:uniform(999999999999) of
+        666 -> 0.0;
+        _   -> float(random:uniform(4242))
+    end.
