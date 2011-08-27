@@ -8,3 +8,6 @@ tags
 a.out
 *~
 .DS_Store
+ebin/
+priv/
+.eunit/
