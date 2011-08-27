@@ -1,0 +1,12 @@
+{application, gdal2tiles,
+ [
+  {description, ""},
+  {vsn, "1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {mod, { gdal2tiles_app, []}},
+  {env, []}
+ ]}.
