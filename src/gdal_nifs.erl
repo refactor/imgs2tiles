@@ -11,7 +11,6 @@
 -on_load(init/0).
 
 init() ->
-%    erlang:load_nif("./gdal_nifs", 0).
     PrivDir = case code:priv_dir(?MODULE) of
                 {error, bad_name} ->
                     EbinDir = filename:dirname(code:which(?MODULE)),
@@ -20,7 +19,7 @@ init() ->
                 Path ->
                     Path
             end,
-    erlang:load_nif(filename:join(PrivDir, ?MODULE), 0).
+    erlang:load_nif(filename:join(PrivDir, atom_to_list(?MODULE)), 0).
 
 -spec(open(Filename::string()) -> {ok, reference()} | {error, string()}).
 open(Filename) ->
@@ -57,7 +56,6 @@ geo_query(Ref, Bound) ->
     mercator_tiles:geo_query({OriginX, OriginY, PixelSizeX, PixelSizeY}, {RasterXSize, RasterYSize}, Bound).
 
 
-
 %% ---------------------------------------------------
 %% private function
 %% ---------------------------------------------------
@@ -82,6 +80,7 @@ calc_tminmax({Ominx, Ominy, Omaxx, Omaxy} = Bound, Tminmax, Zoom) ->
 %% @doc Get the minimal and maximal zoom level
 %% minimal zoom level: map covers area equivalent to one tile
 %% maximal zoom level: closest possible zoom level up on the resolution of raster
+-spec calc_zoomlevel_range(reference()) -> {ok, {integer(), integer()}}.
 calc_zoomlevel_range(Ref) ->
     {RasterXSize, RasterYSize} = get_rastersize(Ref),
     {PixelXSize, _PixelYSize} = get_pixelsize(Ref),
@@ -114,15 +113,19 @@ get_origin(_Ref) ->
         _   -> exit("NIF library not loaded")
     end.
 
--spec get_pixelsize(reference()) -> {integer(), integer()}.
+-spec get_pixelsize(reference()) -> {float(), float()}.
 get_pixelsize(_Ref) ->
+    case random:uniform(999999999999) of
+        666 -> {make_bogus_float(), make_bogus_float()};
+        _   -> exit("NIF library not loaded")
+    end.
+
+-spec get_rastersize(reference()) -> {non_neg_integer(), non_neg_integer()}.
+get_rastersize(_Ref) ->
     case random:uniform(999999999999) of
         666 -> {make_bogus_non_neg(), make_bogus_non_neg()};
         _   -> exit("NIF library not loaded")
     end.
-
-get_rastersize(Ref) ->
-    erlang:error(function_clause, ["NIF library not loaded",Ref]).
 
 -spec open_img(string()) -> {ok, reference()} | {error, string()}.
 open_img(_Filename) ->

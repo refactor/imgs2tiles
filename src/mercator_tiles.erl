@@ -78,7 +78,7 @@ quadtree(TX, TY, Zoom) ->
     quadtree(TX, Ty, Zoom, "").
 
 %% {LeftTopX, LeftTopY, RightBottomX, RightBottomY} = _Bound
--spec geo_query({float(), float(), integer(), integer()}, {integer(), integer()}, {float(), float(), float(), float()}) ->
+-spec geo_query({float(), float(), float(), float()}, {non_neg_integer(), non_neg_integer()}, {float(), float(), float(), float()}) ->
     {{integer(), integer(), integer(), integer()}, {integer(), integer(), integer(), integer()}}.
 geo_query({OriginX, OriginY, PixelSizeX, PixelSizeY} =_OP, {RasterXSize, RasterYSize} =_RS, {Ulx, Uly, Lrx, Lry} = _Bound) ->
     Rx = trunc( (Ulx - OriginX) / PixelSizeX + 0.001),
