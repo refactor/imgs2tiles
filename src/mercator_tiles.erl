@@ -3,7 +3,7 @@
 -export([latlon_to_meters/2, meters_to_latlon/2, meters_to_tile/3, tile_bounds/3, tile_latlon_bounds/3, zoom_for_pixelsize/1]).
 -export([resolution/1]).
 -export([quadtree/3]).
--export([geo_query/3]).
+-export([geo_query/4]).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -78,16 +78,16 @@ quadtree(TX, TY, Zoom) ->
     quadtree(TX, Ty, Zoom, "").
 
 %% {LeftTopX, LeftTopY, RightBottomX, RightBottomY} = _Bound
--spec geo_query({float(), float(), float(), float()}, {non_neg_integer(), non_neg_integer()}, {float(), float(), float(), float()}) ->
+-spec geo_query({float(), float(), float(), float()}, {non_neg_integer(), non_neg_integer()}, {float(), float(), float(), float()}, non_neg_integer()) ->
     {{integer(), integer(), integer(), integer()}, {integer(), integer(), integer(), integer()}}.
-geo_query({OriginX, OriginY, PixelSizeX, PixelSizeY} =_OP, {RasterXSize, RasterYSize} =_RS, {Ulx, Uly, Lrx, Lry} = _Bound) ->
+geo_query({OriginX, OriginY, PixelSizeX, PixelSizeY} =_OP, {RasterXSize, RasterYSize} =_RS, {Ulx, Uly, Lrx, Lry} = _Bound, QuerySize) ->
     Rx = trunc( (Ulx - OriginX) / PixelSizeX + 0.001),
     Ry = trunc( (Uly - OriginY) / PixelSizeY + 0.001),
     Rxsize = trunc( (Lrx - Ulx) / PixelSizeX + 0.5),
     Rysize = trunc( (Lry - Uly) / PixelSizeY + 0.5),
 
-    {NewRx, NewWx, ResWxsize, ResRxsize} = adjust_byedge(Rx, Rxsize, RasterXSize),
-    {NewRy, NewWy, ResWysize, ResRysize} = adjust_byedge(Ry, Rysize, RasterYSize),
+    {NewRx, NewWx, ResWxsize, ResRxsize} = adjust_byedge(Rx, Rxsize, RasterXSize, QuerySize),
+    {NewRy, NewWy, ResWysize, ResRysize} = adjust_byedge(Ry, Rysize, RasterYSize, QuerySize),
 
     {{NewRx, NewRy, ResRxsize, ResRysize}, {NewWx, NewWy, ResWxsize, ResWysize}}.
 
@@ -96,16 +96,23 @@ geo_query({OriginX, OriginY, PixelSizeX, PixelSizeY} =_OP, {RasterXSize, RasterY
 %% ===================================================================
 
 %% @doc Coordinates should not go out of the bounds of the raster
--spec adjust_byedge(integer(), integer(), integer()) -> {integer(), integer(), integer(), integer()}.
-adjust_byedge(R, Rsize, RasterSize) ->
+-spec adjust_byedge(integer(), integer(), integer(), non_neg_integer()) -> {integer(), integer(), integer(), integer()}.
+adjust_byedge(R, Rsize, RasterSize, QuerySize) ->
+    if
+        QuerySize == 0 ->
+            Wsize0 = Rsize;
+        true ->
+            Wsize0 = QuerySize
+    end,
+
     {NewR, NewW, NewWsize, NewRsize} = 
         if R < 0 ->
                 Rshift = abs(R),
-                W = trunc( Rsize * (Rshift / Rsize) ),
-                Wsize = Rsize - W,
+                W = trunc( Wsize0 * (Rshift / Rsize) ),
+                Wsize = Wsize0 - W,
                 {0, W, Wsize, Rsize - trunc(Rsize * (Rshift / Rsize)) };
             true ->
-                {R, 0, Rsize, Rsize}
+                {R, 0, Wsize0, Rsize}
         end,
 
     {ResWsize, ResRsize} = 
@@ -233,7 +240,7 @@ geo_quert_test() ->
     {PixelSizeX, PixelSizeY} = {0.24473611762142541, -0.24473611762142541},
     {RasterXSize, RasterYSize} = {60352, 62961},
     MinMaxBound = {865067, 633770, 865453, 633367},
-    {R, W} = geo_query({OriginX, OriginY, PixelSizeX, PixelSizeY}, {RasterXSize, RasterYSize}, MinMaxBound),
+    {R, W} = geo_query({OriginX, OriginY, PixelSizeX, PixelSizeY}, {RasterXSize, RasterYSize}, MinMaxBound, 0),
     ?assertEqual({0, 14507459, -49680575, -14444498}, R),
     ?assertEqual({49682152, 0, -49680575, -14444498}, W).
 -endif.

@@ -6,7 +6,7 @@
 -export([get_meta/1]).
 -export([get_bound/1, get_pixelsize/1, get_rastersize/1, get_origin/1]).
 -export([calc_zoomlevel_range/1, calc_swne/1, calc_tminmax/1]).
--export([geo_query/2]).
+-export([geo_query/3]).
 
 -on_load(init/0).
 
@@ -47,13 +47,13 @@ get_meta(Ref) ->
 %% x/y shifts (for border tiles). If the querysize is not given, the extent is returned in the native resolution of dataset ds.
 %%
 %% {LeftTopX, LeftTopY, RightBottomX, RightBottomY} = Bound
--spec geo_query(reference(), {float(), float(), float(), float()}) -> 
+-spec geo_query(reference(), {float(), float(), float(), float()}, non_neg_integer()) -> 
     {{integer(), integer(), integer(), integer()}, {integer(), integer(), integer(), integer()}}.
-geo_query(Ref, Bound) ->
+geo_query(Ref, Bound, QuerySize) ->
     {OriginX, OriginY} = get_origin(Ref),
     {PixelSizeX, PixelSizeY} = get_pixelsize(Ref),
     {RasterXSize, RasterYSize} = get_rastersize(Ref),
-    mercator_tiles:geo_query({OriginX, OriginY, PixelSizeX, PixelSizeY}, {RasterXSize, RasterYSize}, Bound).
+    mercator_tiles:geo_query({OriginX, OriginY, PixelSizeX, PixelSizeY}, {RasterXSize, RasterYSize}, Bound, QuerySize).
 
 
 %% ---------------------------------------------------

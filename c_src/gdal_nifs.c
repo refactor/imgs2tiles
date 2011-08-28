@@ -13,6 +13,8 @@
 
 #include "nif_logger.h"
 
+#define TILE_SIZE 256
+
 static ErlNifResourceType* gdal_datasets_RESOURCE;
 
 typedef struct
@@ -24,8 +26,14 @@ typedef struct
 typedef struct
 {
     GDALDatasetH in_ds;     // the original dataset
+
     GDALDatasetH out_ds;    // the VRT dataset which warped in_ds for tile projection
     double out_gt[6];       // warp GeoTransform for georeference
+
+    char* resampling;
+    // How big should be query window be for scaling down
+    // Later on reset according the chosen resampling algorightm
+    int querysize;
 
     // Output Bounds - coordinates in th output SRS
     double ominx;
@@ -34,7 +42,6 @@ typedef struct
     double ominy;
 
     nodata_values* inNodata;
-    char* resampling;
     
     OGRSpatialReferenceH in_srs;
     const char* in_srs_wkt;
@@ -74,9 +81,10 @@ ERL_NIF_TERM gdal_nif_open_img(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv
                                                     gdal_datasets_RESOURCE, 
                                                     sizeof(gdal_dataset_handle));
             memset(handle, '\0', sizeof(*handle));
+            handle->resampling = "average";
+            handle->querysize = TILE_SIZE * 4;
 
             handle->in_ds = in_ds;
-            handle->resampling = "average";
 
             int rasterCount = GDALGetRasterCount(in_ds);
             if (rasterCount == 0) {
