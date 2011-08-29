@@ -35,6 +35,8 @@ typedef struct
     // Later on reset according the chosen resampling algorightm
     int querysize;
 
+    int tilesize;
+
     // Output Bounds - coordinates in th output SRS
     double ominx;
     double omaxx;
@@ -81,6 +83,7 @@ ERL_NIF_TERM gdal_nif_open_img(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv
                                                     gdal_datasets_RESOURCE, 
                                                     sizeof(gdal_dataset_handle));
             memset(handle, '\0', sizeof(*handle));
+            handle->tilesize = TILE_SIZE;
             handle->resampling = "average";
             handle->querysize = TILE_SIZE * 4;
 
@@ -267,45 +270,33 @@ ERL_NIF_TERM gdal_nif_get_bound(ErlNifEnv* env, int argc, const ERL_NIF_TERM arg
     }
 }
 
-ERL_NIF_TERM gdal_nif_get_origin(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+ERL_NIF_TERM gdal_nif_get_datasetinfo(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     LOG("gdal_nif_get_origin is calling");
     gdal_dataset_handle* handle;
 
     if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
-        return enif_make_tuple2(env, 
-                                enif_make_double(env, handle->out_gt[0]), 
-                                enif_make_double(env, handle->out_gt[3]));
+        return enif_make_tuple7(env, 
+                                enif_make_double(env, handle->out_gt[0]),               // OriginX 
+                                enif_make_double(env, handle->out_gt[3]),               // OriginY
+                                enif_make_double(env, handle->out_gt[1]),               // PixelXSize
+                                enif_make_double(env, handle->out_gt[5]),               // PixelYSize
+                                enif_make_int(env, GDALGetRasterXSize(handle->out_ds)), // RasterXSize
+                                enif_make_int(env, GDALGetRasterYSize(handle->out_ds)), // RasterYSize
+                                enif_make_int(env, handle->querysize));                 // QuerySize
     }
     else {
         return enif_make_badarg(env);
     }
 }
 
-ERL_NIF_TERM gdal_nif_get_pixelsize(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+ERL_NIF_TERM gdal_nif_get_tilesize(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    LOG("gdal_nif_get_pixelsize is calling");
+    LOG("gdal_nif_get_tilesize is calling");
     gdal_dataset_handle* handle;
 
     if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
-        return enif_make_tuple2(env, 
-                                enif_make_double(env, handle->out_gt[1]), 
-                                enif_make_double(env, handle->out_gt[5]));
-    }
-    else {
-        return enif_make_badarg(env);
-    }
-}
-
-ERL_NIF_TERM gdal_nif_get_rastersize(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
-{
-    LOG("gdal_nif_get_rastersize is calling");
-    gdal_dataset_handle* handle;
-
-    if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
-        return enif_make_tuple2(env, 
-                                enif_make_int(env, GDALGetRasterXSize(handle->in_ds)), 
-                                enif_make_int(env, GDALGetRasterYSize(handle->in_ds)));
+        return enif_make_int(env, handle->tilesize);
     }
     else {
         return enif_make_badarg(env);
@@ -477,9 +468,10 @@ static ErlNifFunc nif_funcs[] =
     {"warp_dataset", 1, gdal_nif_warp_dataset},
     {"get_bound", 1, gdal_nif_get_bound},
     {"get_meta", 1, gdal_nif_get_meta},
-    {"get_origin", 1, gdal_nif_get_origin},
-    {"get_pixelsize", 1, gdal_nif_get_pixelsize},
-    {"get_rastersize", 1, gdal_nif_get_rastersize},
+    {"get_tilesize", 1, gdal_nif_get_tilesize},
+
+    {"get_datasetinfo", 1, gdal_nif_get_datasetinfo},
+    
     {"close", 1, gdal_nif_close}
 };
 

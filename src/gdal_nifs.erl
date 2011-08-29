@@ -4,9 +4,12 @@
 -export([open/1,
         close/1]).
 -export([get_meta/1]).
--export([get_bound/1, get_pixelsize/1, get_rastersize/1, get_origin/1]).
+-export([get_datasetinfo/1, get_bound/1]).
+-export([geo_query/2]).
 -export([calc_zoomlevel_range/1, calc_swne/1, calc_tminmax/1]).
--export([geo_query/3]).
+-export([generate_base_tiles/1]).
+
+-define(TILE_SIZE, 256).
 
 -on_load(init/0).
 
@@ -47,18 +50,42 @@ get_meta(Ref) ->
 %% x/y shifts (for border tiles). If the querysize is not given, the extent is returned in the native resolution of dataset ds.
 %%
 %% {LeftTopX, LeftTopY, RightBottomX, RightBottomY} = Bound
--spec geo_query(reference(), {float(), float(), float(), float()}, non_neg_integer()) -> 
+-spec geo_query({float(), float(), float(), float(), non_neg_integer(), non_neg_integer(), non_neg_integer()}, {float(), float(), float(), float()}) -> 
     {{integer(), integer(), integer(), integer()}, {integer(), integer(), integer(), integer()}}.
-geo_query(Ref, Bound, QuerySize) ->
-    {OriginX, OriginY} = get_origin(Ref),
-    {PixelSizeX, PixelSizeY} = get_pixelsize(Ref),
-    {RasterXSize, RasterYSize} = get_rastersize(Ref),
+geo_query({OriginX, OriginY, PixelSizeX, PixelSizeY, RasterXSize, RasterYSize, QuerySize} = _DatasetInfo, Bound) ->
     mercator_tiles:geo_query({OriginX, OriginY, PixelSizeX, PixelSizeY}, {RasterXSize, RasterYSize}, Bound, QuerySize).
+
+%% @doc Generation of the base tiles (the lowest in the pyramid) directly from the input raster
+generate_base_tiles(Ref) ->
+    %    LOG("Generating Base Tiles:");
+    {Tminz, Tmaxz} = calc_zoomlevel_range(Ref),
+    Tminmax = calc_tminmax(Ref),
+    % Set the bounds
+    {Tminx, Tminy, Tmaxx, Tmaxy} = lists:nth(Tmaxz + 1, Tminmax),
+    QuerySize = get_querysize(Ref),
+    TCount = (1 + abs(Tmaxx - Tminx)) * (1 + abs(Tmaxy - Tminy)),
+
+    DatasetInfo = get_datasetinfo(Ref),
+
+    generate_tiles_for(Tmaxy, Tminy, Tminx, Tmaxx, Tmaxz,   DatasetInfo).
 
 
 %% ---------------------------------------------------
 %% private function
 %% ---------------------------------------------------
+
+generate_tiles_for(Tminy, Tminy, Tmaxx, Tmaxx, Tz, DatasetInfo) ->
+    ok;
+generate_tiles_for(Ty, Tminy, Tx, Tmaxx, Tz, DatasetInfo) when Ty > Tminy, Tx < Tmaxx ->
+    {MinX, MinY, MaxX, MaxY} = mercator_tiles:tile_bounds(Tx, Ty, Tz),
+    Bound = {MinX, MaxY, MaxX, MinY},
+    {Rb, Wb} = geo_query(DatasetInfo, Bound),
+
+    {Rx, Ry, RxSize, RySize} = Rb,
+    {Wx, Wy, WxSize, WySize} = Wb,
+
+    {Rb, Wb}.
+
 
 calc_tminmax(Ref) ->
     Bound = get_bound(Ref),
@@ -80,13 +107,13 @@ calc_tminmax({Ominx, Ominy, Omaxx, Omaxy} = Bound, Tminmax, Zoom) ->
 %% @doc Get the minimal and maximal zoom level
 %% minimal zoom level: map covers area equivalent to one tile
 %% maximal zoom level: closest possible zoom level up on the resolution of raster
--spec calc_zoomlevel_range(reference()) -> {ok, {integer(), integer()}}.
+-spec calc_zoomlevel_range(reference()) -> {integer(), integer()}.
 calc_zoomlevel_range(Ref) ->
-    {RasterXSize, RasterYSize} = get_rastersize(Ref),
-    {PixelXSize, _PixelYSize} = get_pixelsize(Ref),
-    Tminz = mercator_tiles:zoom_for_pixelsize( PixelXSize * max( RasterXSize, RasterYSize) / 256 ),
-    Tmaxz = mercator_tiles:zoom_for_pixelsize( PixelXSize ),
-    {ok, {Tminz, Tmaxz}}.
+    {_OriginX, _OriginY, PixelSizeX, _PixelSizeY, RasterXSize, RasterYSize, _QuerySize} = get_datasetinfo(Ref),
+    TileSize = get_tilesize(Ref),
+    Tminz = mercator_tiles:zoom_for_pixelsize( PixelSizeX * max( RasterXSize, RasterYSize) / TileSize ),
+    Tmaxz = mercator_tiles:zoom_for_pixelsize( PixelSizeX ),
+    {Tminz, Tmaxz}.
 
 calc_swne(Ref) ->
     {Ominx, Ominy, Omaxx, Omaxy} = get_bound(Ref),
@@ -98,6 +125,20 @@ calc_swne(Ref) ->
 %% private nif function
 %% ---------------------------------------------------
 
+-spec get_tilesize(reference()) -> non_neg_integer().
+get_tilesize(_Ref) ->
+    case random:uniform(999999999999) of
+        666 -> make_bogus_non_neg();
+        _  -> exit("NIF library not loaded")
+    end.
+
+-spec get_querysize(reference()) -> non_neg_integer().
+get_querysize(_Ref) ->
+    case random:uniform(999999999999) of
+        666 -> make_bogus_non_neg();
+        _  -> exit("NIF library not loaded")
+    end.
+
 %% @doc Bounds in meters
 -spec get_bound(reference()) -> {float(), float(), float(), float()}.
 get_bound(_Ref) ->
@@ -106,24 +147,11 @@ get_bound(_Ref) ->
         _  -> exit("NIF library not loaded")
     end.
 
--spec get_origin(reference()) -> {float(), float()}.
-get_origin(_Ref) ->
+%% @doc DatasetInfo = {OriginX, OriginY, PixelSizeX, PixelSizeY, RasterXSize, RasterYSize, QuerySize},
+-spec get_datasetinfo(reference()) -> {float(), float(), float(), float(), non_neg_integer(), non_neg_integer(), non_neg_integer()}.
+get_datasetinfo(_Ref) ->
     case random:uniform(999999999999) of
-        666 -> {make_bogus_float(), make_bogus_float()};
-        _   -> exit("NIF library not loaded")
-    end.
-
--spec get_pixelsize(reference()) -> {float(), float()}.
-get_pixelsize(_Ref) ->
-    case random:uniform(999999999999) of
-        666 -> {make_bogus_float(), make_bogus_float()};
-        _   -> exit("NIF library not loaded")
-    end.
-
--spec get_rastersize(reference()) -> {non_neg_integer(), non_neg_integer()}.
-get_rastersize(_Ref) ->
-    case random:uniform(999999999999) of
-        666 -> {make_bogus_non_neg(), make_bogus_non_neg()};
+        666 -> {make_bogus_float(), make_bogus_float(), make_bogus_float(), make_bogus_float(), make_bogus_non_neg(), make_bogus_non_neg(), make_bogus_non_neg()};
         _   -> exit("NIF library not loaded")
     end.
 
