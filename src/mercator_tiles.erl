@@ -3,14 +3,15 @@
 -export([latlon_to_meters/2, meters_to_latlon/2, meters_to_tile/3, tile_bounds/3, tile_latlon_bounds/3, zoom_for_pixelsize/1]).
 -export([resolution/1]).
 -export([quadtree/3]).
--export([geo_query/4]).
+-export([geo_query/3]).
+
+-include("gdal2tiles.hrl").
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
 -define(MAXZOOMLEVEL, 32).
--define(TILE_SIZE, 256).
 -define(EARTH_RADIUS, 6378137).
 -define(PI, math:pi()).
 -define(ORIGIN_SHIFT, (2 * ?PI * ?EARTH_RADIUS / 2.0)).
@@ -47,14 +48,14 @@ meters_to_tile(MX, MY, Zoom) ->
     pixels_to_tile(PX, PY).
 
 %% @doc Returns bounds of the given tile in EPSG:900913 coordinates
--spec(tile_bounds(TX::non_neg_integer(), TY::non_neg_integer(), Zoom::byte()) -> {float(),float(),float(),float()}).
+-spec tile_bounds(TX::non_neg_integer(), TY::non_neg_integer(), Zoom::byte()) -> enclosure().
 tile_bounds(TX, TY, Zoom) ->
     {MinX, MinY} = pixels_to_meters(TX * ?TILE_SIZE, TY * ?TILE_SIZE, Zoom),
     {MaxX, MaxY} = pixels_to_meters((TX + 1) * ?TILE_SIZE, (TY + 1) * ?TILE_SIZE, Zoom),
     {MinX, MinY, MaxX, MaxY}.
 
 %% @doc Returns bounds of the given tile in latutude/longitude using WGS84 datum
--spec(tile_latlon_bounds(TX::non_neg_integer(), TY::non_neg_integer(), Zoom::byte()) -> {float(),float(),float(),float()}).
+-spec tile_latlon_bounds(TX::non_neg_integer(), TY::non_neg_integer(), Zoom::byte()) -> enclosure().
 tile_latlon_bounds(TX, TY, Zoom) ->
     {MinX, MinY, MaxX, MaxY} = tile_bounds(TX, TY, Zoom),
     {MinLat, MinLon} = meters_to_latlon(MinX, MinY),
@@ -77,10 +78,12 @@ quadtree(TX, TY, Zoom) ->
     Ty = trunc(math:pow(2, Zoom) - 1 - TY),
     quadtree(TX, Ty, Zoom, "").
 
+%% @doc For given dataset and query in cartographic coordinates returns parameters for ReadRaster() in raster coordinates and
+%% x/y shifts (for border tiles). If the querysize is not given, the extent is returned in the native resolution of dataset ds.
 %% {LeftTopX, LeftTopY, RightBottomX, RightBottomY} = _Bound
--spec geo_query({float(), float(), float(), float()}, {non_neg_integer(), non_neg_integer()}, {float(), float(), float(), float()}, non_neg_integer()) ->
+-spec geo_query({float(), float(), float(), float(), non_neg_integer(), non_neg_integer()}, bound(), non_neg_integer()) ->
     {{integer(), integer(), integer(), integer()}, {integer(), integer(), integer(), integer()}}.
-geo_query({OriginX, OriginY, PixelSizeX, PixelSizeY} =_OP, {RasterXSize, RasterYSize} =_RS, {Ulx, Uly, Lrx, Lry} = _Bound, QuerySize) ->
+geo_query({OriginX, OriginY, PixelSizeX, PixelSizeY, RasterXSize, RasterYSize} =_DatasetInfo, {Ulx, Uly, Lrx, Lry} = _Bound, QuerySize) ->
     Rx = trunc( (Ulx - OriginX) / PixelSizeX + 0.001),
     Ry = trunc( (Uly - OriginY) / PixelSizeY + 0.001),
     Rxsize = trunc( (Lrx - Ulx) / PixelSizeX + 0.5),
@@ -240,7 +243,7 @@ geo_quert_test() ->
     {PixelSizeX, PixelSizeY} = {0.24473611762142541, -0.24473611762142541},
     {RasterXSize, RasterYSize} = {60352, 62961},
     MinMaxBound = {865067, 633770, 865453, 633367},
-    {R, W} = geo_query({OriginX, OriginY, PixelSizeX, PixelSizeY}, {RasterXSize, RasterYSize}, MinMaxBound, 0),
+    {R, W} = geo_query({OriginX, OriginY, PixelSizeX, PixelSizeY, RasterXSize, RasterYSize}, MinMaxBound, 0),
     ?assertEqual({0, 14507459, -49680575, -14444498}, R),
     ?assertEqual({49682152, 0, -49680575, -14444498}, W).
 -endif.

@@ -5,11 +5,10 @@
         close/1]).
 -export([get_meta/1]).
 -export([get_datasetinfo/1, get_bound/1]).
--export([geo_query/2]).
 -export([calc_zoomlevel_range/1, calc_swne/1, calc_tminmax/1]).
 -export([generate_base_tiles/1]).
 
--define(TILE_SIZE, 256).
+-include("gdal2tiles.hrl").
 
 -on_load(init/0).
 
@@ -46,15 +45,6 @@ close(_Ref) ->
 get_meta(Ref) ->
     erlang:error(function_clause, ["NIF library not loaded",Ref]).
 
-%% @doc For given dataset and query in cartographic coordinates returns parameters for ReadRaster() in raster coordinates and
-%% x/y shifts (for border tiles). If the querysize is not given, the extent is returned in the native resolution of dataset ds.
-%%
-%% {LeftTopX, LeftTopY, RightBottomX, RightBottomY} = Bound
--spec geo_query({float(), float(), float(), float(), non_neg_integer(), non_neg_integer(), non_neg_integer()}, {float(), float(), float(), float()}) -> 
-    {{integer(), integer(), integer(), integer()}, {integer(), integer(), integer(), integer()}}.
-geo_query({OriginX, OriginY, PixelSizeX, PixelSizeY, RasterXSize, RasterYSize, QuerySize} = _DatasetInfo, Bound) ->
-    mercator_tiles:geo_query({OriginX, OriginY, PixelSizeX, PixelSizeY}, {RasterXSize, RasterYSize}, Bound, QuerySize).
-
 %% @doc Generation of the base tiles (the lowest in the pyramid) directly from the input raster
 generate_base_tiles(Ref) ->
     %    LOG("Generating Base Tiles:");
@@ -67,19 +57,19 @@ generate_base_tiles(Ref) ->
 
     DatasetInfo = get_datasetinfo(Ref),
 
-    generate_tiles_for(Tmaxy, Tminy, Tminx, Tmaxx, Tmaxz,   DatasetInfo).
+    generate_tiles_for(Tmaxy, Tminy, Tminx, Tmaxx, Tmaxz,   DatasetInfo, QuerySize).
 
 
 %% ---------------------------------------------------
 %% private function
 %% ---------------------------------------------------
 
-generate_tiles_for(Tminy, Tminy, Tmaxx, Tmaxx, Tz, DatasetInfo) ->
+generate_tiles_for(Tminy, Tminy, Tmaxx, Tmaxx, Tz, DatasetInfo, _QuerySize) ->
     ok;
-generate_tiles_for(Ty, Tminy, Tx, Tmaxx, Tz, DatasetInfo) when Ty > Tminy, Tx < Tmaxx ->
+generate_tiles_for(Ty, Tminy, Tx, Tmaxx, Tz, DatasetInfo, QuerySize) when Ty > Tminy, Tx < Tmaxx ->
     {MinX, MinY, MaxX, MaxY} = mercator_tiles:tile_bounds(Tx, Ty, Tz),
     Bound = {MinX, MaxY, MaxX, MinY},
-    {Rb, Wb} = geo_query(DatasetInfo, Bound),
+    {Rb, Wb} = mercator_tiles:geo_query(DatasetInfo, Bound, QuerySize),
 
     {Rx, Ry, RxSize, RySize} = Rb,
     {Wx, Wy, WxSize, WySize} = Wb,
@@ -109,7 +99,7 @@ calc_tminmax({Ominx, Ominy, Omaxx, Omaxy} = Bound, Tminmax, Zoom) ->
 %% maximal zoom level: closest possible zoom level up on the resolution of raster
 -spec calc_zoomlevel_range(reference()) -> {integer(), integer()}.
 calc_zoomlevel_range(Ref) ->
-    {_OriginX, _OriginY, PixelSizeX, _PixelSizeY, RasterXSize, RasterYSize, _QuerySize} = get_datasetinfo(Ref),
+    {_OriginX, _OriginY, PixelSizeX, _PixelSizeY, RasterXSize, RasterYSize} = get_datasetinfo(Ref),
     TileSize = get_tilesize(Ref),
     Tminz = mercator_tiles:zoom_for_pixelsize( PixelSizeX * max( RasterXSize, RasterYSize) / TileSize ),
     Tmaxz = mercator_tiles:zoom_for_pixelsize( PixelSizeX ),
@@ -147,11 +137,11 @@ get_bound(_Ref) ->
         _  -> exit("NIF library not loaded")
     end.
 
-%% @doc DatasetInfo = {OriginX, OriginY, PixelSizeX, PixelSizeY, RasterXSize, RasterYSize, QuerySize},
--spec get_datasetinfo(reference()) -> {float(), float(), float(), float(), non_neg_integer(), non_neg_integer(), non_neg_integer()}.
+%% @doc DatasetInfo = {OriginX, OriginY, PixelSizeX, PixelSizeY, RasterXSize, RasterYSize},
+-spec get_datasetinfo(reference()) -> datasetinfo().
 get_datasetinfo(_Ref) ->
     case random:uniform(999999999999) of
-        666 -> {make_bogus_float(), make_bogus_float(), make_bogus_float(), make_bogus_float(), make_bogus_non_neg(), make_bogus_non_neg(), make_bogus_non_neg()};
+        666 -> make_bogus_datasetinfo();
         _   -> exit("NIF library not loaded")
     end.
 
@@ -195,3 +185,7 @@ make_bogus_float() ->
         666 -> 0.0;
         _   -> float(random:uniform(4242))
     end.
+
+make_bogus_datasetinfo() ->
+    {make_bogus_float(), make_bogus_float(), make_bogus_float(), make_bogus_float(), make_bogus_non_neg(), make_bogus_non_neg()}.
+

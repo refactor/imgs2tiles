@@ -276,14 +276,13 @@ ERL_NIF_TERM gdal_nif_get_datasetinfo(ErlNifEnv* env, int argc, const ERL_NIF_TE
     gdal_dataset_handle* handle;
 
     if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
-        return enif_make_tuple7(env, 
+        return enif_make_tuple6(env, 
                                 enif_make_double(env, handle->out_gt[0]),               // OriginX 
                                 enif_make_double(env, handle->out_gt[3]),               // OriginY
                                 enif_make_double(env, handle->out_gt[1]),               // PixelXSize
                                 enif_make_double(env, handle->out_gt[5]),               // PixelYSize
                                 enif_make_int(env, GDALGetRasterXSize(handle->out_ds)), // RasterXSize
-                                enif_make_int(env, GDALGetRasterYSize(handle->out_ds)), // RasterYSize
-                                enif_make_int(env, handle->querysize));                 // QuerySize
+                                enif_make_int(env, GDALGetRasterYSize(handle->out_ds))); // RasterYSize
     }
     else {
         return enif_make_badarg(env);
