@@ -13,8 +13,6 @@
 
 #include "nif_logger.h"
 
-#define TILE_SIZE 256
-
 static ErlNifResourceType* gdal_datasets_RESOURCE;
 
 typedef struct
@@ -30,17 +28,6 @@ typedef struct
     GDALDatasetH out_ds;    // the VRT dataset which warped in_ds for tile projection
 
     char* resampling;
-    // How big should be query window be for scaling down
-    // Later on reset according the chosen resampling algorightm
-    int querysize;
-
-    int tilesize;
-
-    // Output Bounds - coordinates in th output SRS
-    double ominx;
-    double omaxx;
-    double omaxy;
-    double ominy;
 
     nodata_values* inNodata;
     
@@ -69,7 +56,7 @@ static ERL_NIF_TERM ATOM_OK;
 
 static void destroy_handle(gdal_dataset_handle* handle);
 
-ERL_NIF_TERM gdal_nif_open_img(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM gdal_nif_open_img(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     char name[4096];
     size_t name_sz;
@@ -82,9 +69,7 @@ ERL_NIF_TERM gdal_nif_open_img(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv
                                                     gdal_datasets_RESOURCE, 
                                                     sizeof(gdal_dataset_handle));
             memset(handle, '\0', sizeof(*handle));
-            handle->tilesize = TILE_SIZE;
             handle->resampling = "average";
-            handle->querysize = TILE_SIZE * 4;
 
             handle->in_ds = in_ds;
 
@@ -207,11 +192,6 @@ static ERL_NIF_TERM gdal_nif_warp_dataset(ErlNifEnv* env, int argc, const ERL_NI
                                         ERL_NIF_LATIN1));
         }
 
-        handle->ominx = padfTransform[0];
-        handle->omaxx = padfTransform[0] + GDALGetRasterXSize(out_ds) * padfTransform[1];
-        handle->omaxy = padfTransform[3];
-        handle->ominy = padfTransform[3] + GDALGetRasterYSize(out_ds) * padfTransform[5];
-
         return enif_make_tuple2(env,
                                 ATOM_OK,
                                 enif_make_tuple6(env, 
@@ -260,37 +240,7 @@ static ERL_NIF_TERM gdal_nif_calc_srs(ErlNifEnv* env, int argc, const ERL_NIF_TE
     }
 }
 
-ERL_NIF_TERM gdal_nif_get_enclosure(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
-{
-    LOG("gdal_nif_get_bound is calling");
-    gdal_dataset_handle* handle;
-
-    if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
-        return enif_make_tuple4(env,
-                                enif_make_double(env, handle->ominx),
-                                enif_make_double(env, handle->ominy),
-                                enif_make_double(env, handle->omaxx),
-                                enif_make_double(env, handle->omaxy));
-    }
-    else {
-        return enif_make_badarg(env);
-    }
-}
-
-ERL_NIF_TERM gdal_nif_get_tilesize(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
-{
-    LOG("gdal_nif_get_tilesize is calling");
-    gdal_dataset_handle* handle;
-
-    if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
-        return enif_make_int(env, handle->tilesize);
-    }
-    else {
-        return enif_make_badarg(env);
-    }
-}
-
-ERL_NIF_TERM gdal_nif_get_meta(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM gdal_nif_get_meta(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     LOG("gdal_nif_get_meta is calling");
     gdal_dataset_handle* handle;
@@ -363,15 +313,6 @@ ERL_NIF_TERM gdal_nif_get_meta(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv
                                                 enif_make_list_from_array(env, fileTerms, fileIdx));
             }
 
-            terms[idx++] = enif_make_tuple2(env,
-                                            enif_make_atom(env, "outBound"),
-                                            enif_make_list4(env,
-                                                enif_make_double(env, handle->ominx),
-                                                enif_make_double(env, handle->omaxx),
-                                                enif_make_double(env, handle->ominy),
-                                                enif_make_double(env, handle->omaxy)));
-            LOG("bounds (output srs: %f, %f, %f, %f", handle->ominx, handle->ominy, handle->omaxx, handle->omaxy);
-
             return enif_make_list_from_array(env, terms, idx);
         }
         else {
@@ -383,7 +324,7 @@ ERL_NIF_TERM gdal_nif_get_meta(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv
     }
 }
 
-ERL_NIF_TERM gdal_nif_close(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM gdal_nif_close(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     gdal_dataset_handle* handle = NULL;
     if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
@@ -443,9 +384,7 @@ static ErlNifFunc nif_funcs[] =
     {"calc_nodatavalue", 1, gdal_nif_calc_nodatavalue},
     {"calc_srs", 1, gdal_nif_calc_srs},
     {"warp_dataset", 1, gdal_nif_warp_dataset},
-    {"get_enclosure", 1, gdal_nif_get_enclosure},
     {"get_meta", 1, gdal_nif_get_meta},
-    {"get_tilesize", 1, gdal_nif_get_tilesize},
 
     {"close", 1, gdal_nif_close}
 };
