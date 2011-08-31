@@ -28,7 +28,6 @@ typedef struct
     GDALDatasetH in_ds;     // the original dataset
 
     GDALDatasetH out_ds;    // the VRT dataset which warped in_ds for tile projection
-    double out_gt[6];       // warp GeoTransform for georeference
 
     char* resampling;
     // How big should be query window be for scaling down
@@ -207,14 +206,22 @@ static ERL_NIF_TERM gdal_nif_warp_dataset(ErlNifEnv* env, int argc, const ERL_NI
                                         "Georeference of the raster contains rotation or skew. Such raster is not supported. Please use gdalwarp first",
                                         ERL_NIF_LATIN1));
         }
-        memcpy(handle->out_gt, padfTransform, sizeof(padfTransform));
 
         handle->ominx = padfTransform[0];
         handle->omaxx = padfTransform[0] + GDALGetRasterXSize(out_ds) * padfTransform[1];
         handle->omaxy = padfTransform[3];
         handle->ominy = padfTransform[3] + GDALGetRasterYSize(out_ds) * padfTransform[5];
 
-        return ATOM_OK;
+        return enif_make_tuple2(env,
+                                ATOM_OK,
+                                enif_make_tuple6(env, 
+                                    enif_make_double(env, padfTransform[0]),               // OriginX 
+                                    enif_make_double(env, padfTransform[3]),               // OriginY
+                                    enif_make_double(env, padfTransform[1]),               // PixelXSize
+                                    enif_make_double(env, padfTransform[5]),               // PixelYSize
+                                    enif_make_int(env, GDALGetRasterXSize(handle->out_ds)), // RasterXSize
+                                    enif_make_int(env, GDALGetRasterYSize(handle->out_ds))) // RasterYSize
+                );
     }
     else {
         return enif_make_badarg(env);
@@ -253,7 +260,7 @@ static ERL_NIF_TERM gdal_nif_calc_srs(ErlNifEnv* env, int argc, const ERL_NIF_TE
     }
 }
 
-ERL_NIF_TERM gdal_nif_get_bound(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+ERL_NIF_TERM gdal_nif_get_enclosure(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     LOG("gdal_nif_get_bound is calling");
     gdal_dataset_handle* handle;
@@ -264,25 +271,6 @@ ERL_NIF_TERM gdal_nif_get_bound(ErlNifEnv* env, int argc, const ERL_NIF_TERM arg
                                 enif_make_double(env, handle->ominy),
                                 enif_make_double(env, handle->omaxx),
                                 enif_make_double(env, handle->omaxy));
-    }
-    else {
-        return enif_make_badarg(env);
-    }
-}
-
-ERL_NIF_TERM gdal_nif_get_datasetinfo(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
-{
-    LOG("gdal_nif_get_origin is calling");
-    gdal_dataset_handle* handle;
-
-    if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
-        return enif_make_tuple6(env, 
-                                enif_make_double(env, handle->out_gt[0]),               // OriginX 
-                                enif_make_double(env, handle->out_gt[3]),               // OriginY
-                                enif_make_double(env, handle->out_gt[1]),               // PixelXSize
-                                enif_make_double(env, handle->out_gt[5]),               // PixelYSize
-                                enif_make_int(env, GDALGetRasterXSize(handle->out_ds)), // RasterXSize
-                                enif_make_int(env, GDALGetRasterYSize(handle->out_ds))); // RasterYSize
     }
     else {
         return enif_make_badarg(env);
@@ -375,16 +363,6 @@ ERL_NIF_TERM gdal_nif_get_meta(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv
                                                 enif_make_list_from_array(env, fileTerms, fileIdx));
             }
 
-            terms[idx++] = enif_make_tuple2(env, 
-                                            enif_make_atom(env, "warpingGeoTransform"), 
-                                            enif_make_list6(env, 
-                                                enif_make_double(env, handle->out_gt[0]),
-                                                enif_make_double(env, handle->out_gt[1]),
-                                                enif_make_double(env, handle->out_gt[2]),
-                                                enif_make_double(env, handle->out_gt[3]),
-                                                enif_make_double(env, handle->out_gt[4]),
-                                                enif_make_double(env, handle->out_gt[5])));
-
             terms[idx++] = enif_make_tuple2(env,
                                             enif_make_atom(env, "outBound"),
                                             enif_make_list4(env,
@@ -465,12 +443,10 @@ static ErlNifFunc nif_funcs[] =
     {"calc_nodatavalue", 1, gdal_nif_calc_nodatavalue},
     {"calc_srs", 1, gdal_nif_calc_srs},
     {"warp_dataset", 1, gdal_nif_warp_dataset},
-    {"get_bound", 1, gdal_nif_get_bound},
+    {"get_enclosure", 1, gdal_nif_get_enclosure},
     {"get_meta", 1, gdal_nif_get_meta},
     {"get_tilesize", 1, gdal_nif_get_tilesize},
 
-    {"get_datasetinfo", 1, gdal_nif_get_datasetinfo},
-    
     {"close", 1, gdal_nif_close}
 };
 

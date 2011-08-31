@@ -1,6 +1,6 @@
 -module(mercator_tiles).
 
--export([latlon_to_meters/2, meters_to_latlon/2, meters_to_tile/3, tile_bounds/3, tile_latlon_bounds/3, zoom_for_pixelsize/1]).
+-export([latlon_to_meters/2, meters_to_latlon/2, meters_to_tile/3, tile_enclosure/3, tile_latlon_bounds/3, zoom_for_pixelsize/1]).
 -export([resolution/1]).
 -export([quadtree/3]).
 -export([geo_query/3]).
@@ -47,9 +47,9 @@ meters_to_tile(MX, MY, Zoom) ->
     {PX, PY} = meters_to_pixels(MX, MY, Zoom),
     pixels_to_tile(PX, PY).
 
-%% @doc Returns bounds of the given tile in EPSG:900913 coordinates
--spec tile_bounds(TX::non_neg_integer(), TY::non_neg_integer(), Zoom::byte()) -> enclosure().
-tile_bounds(TX, TY, Zoom) ->
+%% @doc Returns enclosure of the given tile in EPSG:900913 coordinates
+-spec tile_enclosure(TX::non_neg_integer(), TY::non_neg_integer(), Zoom::byte()) -> enclosure().
+tile_enclosure(TX, TY, Zoom) ->
     {MinX, MinY} = pixels_to_meters(TX * ?TILE_SIZE, TY * ?TILE_SIZE, Zoom),
     {MaxX, MaxY} = pixels_to_meters((TX + 1) * ?TILE_SIZE, (TY + 1) * ?TILE_SIZE, Zoom),
     {MinX, MinY, MaxX, MaxY}.
@@ -57,7 +57,7 @@ tile_bounds(TX, TY, Zoom) ->
 %% @doc Returns bounds of the given tile in latutude/longitude using WGS84 datum
 -spec tile_latlon_bounds(TX::non_neg_integer(), TY::non_neg_integer(), Zoom::byte()) -> enclosure().
 tile_latlon_bounds(TX, TY, Zoom) ->
-    {MinX, MinY, MaxX, MaxY} = tile_bounds(TX, TY, Zoom),
+    {MinX, MinY, MaxX, MaxY} = tile_enclosure(TX, TY, Zoom),
     {MinLat, MinLon} = meters_to_latlon(MinX, MinY),
     {MaxLat, MaxLon} = meters_to_latlon(MaxX, MaxY),
     {MinLat, MinLon, MaxLat, MaxLon}.
@@ -221,8 +221,8 @@ meters_to_tile_test() ->
     math_utils:xy_assert({0, 0}, meters_to_tile(1000, 1000, 0)),
     math_utils:xy_assert({26, 19}, meters_to_tile(13247019.404399557, 4865942.2795031769, 5)).
 
-tile_bounds_test() ->
-    math_utils:swne_assert({-20037508.342789244, -20037508.342789244, 20037508.342789244, 20037508.342789244}, tile_bounds(0, 0, 0)).
+tile_enclosure_test() ->
+    math_utils:swne_assert({-20037508.342789244, -20037508.342789244, 20037508.342789244, 20037508.342789244}, tile_enclosure(0, 0, 0)).
 
 tile_latlon_bounds_test() ->
     math_utils:swne_assert({-85.051128779806589, -180.0, 85.051128779806604, 180.0}, tile_latlon_bounds(0,0,0)),
