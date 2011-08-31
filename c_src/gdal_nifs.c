@@ -26,7 +26,7 @@ typedef struct
     GDALDatasetH in_ds;     // the original dataset
 
     GDALDatasetH out_ds;    // the VRT dataset which warped in_ds for tile projection
-
+    GDALRasterBandH alphaBand;
     char* resampling;
 
     nodata_values* inNodata;
@@ -240,6 +240,29 @@ static ERL_NIF_TERM gdal_nif_calc_srs(ErlNifEnv* env, int argc, const ERL_NIF_TE
     }
 }
 
+static ERL_NIF_TERM gdal_nif_calc_data_bandscount(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) 
+{
+    LOG("gdal_nif_calc_data_bandscount is calling");
+    gdal_dataset_handle* handle;
+
+    if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
+        unsigned int dataBandsCount;
+        handle->alphaBand = GDALGetMaskBand(GDALGetRasterBand(handle->out_ds, 1));
+        int rasterCount = GDALGetRasterCount(handle->out_ds);
+        if (GDALGetMaskFlags(handle->alphaBand) & GMF_ALPHA || rasterCount == 4 || rasterCount == 2) {
+            dataBandsCount = rasterCount - 1;
+        }
+        else {
+            dataBandsCount = rasterCount;
+        }
+
+        return enif_make_uint(env, dataBandsCount);
+    }
+    else {
+        return enif_make_badarg(env);
+    }
+}
+
 static ERL_NIF_TERM gdal_nif_get_meta(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     LOG("gdal_nif_get_meta is calling");
@@ -384,6 +407,7 @@ static ErlNifFunc nif_funcs[] =
     {"calc_nodatavalue", 1, gdal_nif_calc_nodatavalue},
     {"calc_srs", 1, gdal_nif_calc_srs},
     {"warp_dataset", 1, gdal_nif_warp_dataset},
+    {"calc_data_bandscount", 1, gdal_nif_calc_data_bandscount},
     {"get_meta", 1, gdal_nif_get_meta},
 
     {"close", 1, gdal_nif_close}

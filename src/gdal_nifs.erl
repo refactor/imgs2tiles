@@ -11,8 +11,8 @@
 
 % QuerySize: How big should be query window be for scaling down
 % Later on reset according the chosen resampling algorightm
--type sizeinfo() :: {QuerySize::non_neg_integer(), TileSize::non_neg_integer()}.
--type imghandler() :: {reference(), datasetinfo(), sizeinfo()}.
+-type metainfo() :: {QuerySize::non_neg_integer(), TileSize::non_neg_integer(), DataBandsCount::non_neg_integer(), TileBands::non_neg_integer()}.
+-type imghandler() :: {reference(), datasetinfo(), metainfo()}.
 
 -on_load(init/0).
 
@@ -34,7 +34,8 @@ open(Filename) ->
             calc_nodatavalue(Hdataset),
             calc_srs(Hdataset),
             {ok, DatasetInfo} = warp_dataset(Hdataset),
-            {ok, {Hdataset, DatasetInfo, {4 * ?TILE_SIZE, ?TILE_SIZE}}};
+            DataBandsCount = calc_data_bandscount(Hdataset),
+            {ok, {Hdataset, DatasetInfo, {4 * ?TILE_SIZE, ?TILE_SIZE, DataBandsCount, DataBandsCount + 1}}};
         {error, _} = Err ->
             Err
     end.
@@ -50,7 +51,7 @@ get_meta(Ref) ->
     erlang:error(function_clause, ["NIF library not loaded",Ref]).
 
 %% @doc Generation of the base tiles (the lowest in the pyramid) directly from the input raster
-generate_base_tiles({Ref, DatasetInfo, {QuerySize, _TileSize}} = ImgHandler) ->
+generate_base_tiles({Ref, DatasetInfo, {QuerySize, _TileSize, _DataBandsCount, _TileBands}} = ImgHandler) ->
     %    LOG("Generating Base Tiles:");
     {Tminz, Tmaxz} = calc_zoomlevel_range(ImgHandler),
     Tminmax = calc_tminmax(DatasetInfo),
@@ -141,6 +142,12 @@ calc_nodatavalue(_Ref) ->
 calc_srs(_Ref) ->
     case random:uniform(999999999999) of
         666 -> ok;
+        _   -> exit("NIF library not loaded")
+    end.
+
+calc_data_bandscount(_Ref) ->
+    case random:uniform(999999999999) of
+        666 -> make_bogus_non_neg();
         _   -> exit("NIF library not loaded")
     end.
 
