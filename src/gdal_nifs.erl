@@ -4,7 +4,10 @@
 -export([open/1,
         close/1]).
 -export([get_meta/1]).
--export([calc_zoomlevel_range/1, calc_swne/1, calc_tminmax/1]).
+-export([calc_zoomlevel_range/1, 
+         create_mem_dstile/3,
+         calc_swne/1, 
+         calc_tminmax/1]).
 -export([generate_base_tiles/1]).
 
 -include("gdal2tiles.hrl").
@@ -150,6 +153,10 @@ calc_data_bandscount(_Ref) ->
         666 -> make_bogus_non_neg();
         _   -> exit("NIF library not loaded")
     end.
+
+-spec create_mem_dstile(reference(), bandregion(), bandregion()) -> ok.
+create_mem_dstile(_Ref, _R, _W) ->
+    ok.
 
 -spec warp_dataset(reference()) -> {ok, datasetinfo()}.
 warp_dataset(_Ref) ->

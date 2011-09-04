@@ -27,6 +27,8 @@ typedef struct
 
     GDALDatasetH out_ds;    // the VRT dataset which warped in_ds for tile projection
     GDALRasterBandH alphaBand;
+    int querysize, tilesize, dataBandsCount, tilebands;
+
     char* resampling;
 
     nodata_values* inNodata;
@@ -70,6 +72,8 @@ static ERL_NIF_TERM gdal_nif_open_img(ErlNifEnv* env, int argc, const ERL_NIF_TE
                                                     sizeof(gdal_dataset_handle));
             memset(handle, '\0', sizeof(*handle));
             handle->resampling = "average";
+            handle->querysize = 256 * 4;
+            handle->tilesize = 256;
 
             handle->in_ds = in_ds;
 
@@ -256,11 +260,160 @@ static ERL_NIF_TERM gdal_nif_calc_data_bandscount(ErlNifEnv* env, int argc, cons
             dataBandsCount = rasterCount;
         }
 
+        handle->dataBandsCount = dataBandsCount;
+        handle->tilebands = dataBandsCount + 1;
+
         return enif_make_uint(env, dataBandsCount);
     }
     else {
         return enif_make_badarg(env);
     }
+}
+
+static void scale_query_to_tile(gdal_dataset_handle* handle, GDALDatasetH dsquery, GDALDatasetH dstile, const char* tilefilename)
+{
+    LOG("scale_query_to_tile is calling ... tilefilename = %s", tilefilename);
+
+}
+
+static ERL_NIF_TERM gdal_nif_create_mem_dstile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    LOG("gdal_nif_calc_create_mem_dstile is calling, arity = %d", argc);
+
+    // int querysize = 256 * 4, tilesize = 256, dataBandsCount, tilebands;
+
+    gdal_priv_data* priv_data = (gdal_priv_data*) enif_priv_data(env);   
+    GDALDriverH  hOutDriver = priv_data->hOutDriver;
+    GDALDriverH  hMemDriver = priv_data->hMemDriver;
+
+    GDALDatasetH ds = NULL;
+    gdal_dataset_handle* handle = NULL;
+    if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
+        ds = handle->out_ds;
+    }
+    else {
+        return enif_make_badarg(env);
+    }
+        
+    int rx, ry, rxsize, rysize;
+    int rarity;
+    const ERL_NIF_TERM* r;
+    if (enif_get_tuple(env, argv[1], &rarity, &r)) {
+        enif_get_int(env, r[0], &rx);
+        enif_get_int(env, r[1], &ry);
+        enif_get_int(env, r[2], &rxsize);
+        enif_get_int(env, r[3], &rysize);
+        LOG("rx=%d, ry=%d, rxsize=%d, rysize=%d", rx, ry, rxsize, rysize);
+    }
+    else {
+        return enif_make_badarg(env);
+    }
+
+    int wx, wy, wxsize, wysize;
+    int warity;
+    const ERL_NIF_TERM* w;
+    if (enif_get_tuple(env, argv[2], &warity, &w)) {
+        enif_get_int(env, w[0], &wx);
+        enif_get_int(env, w[1], &wy);
+        enif_get_int(env, w[2], &wxsize);
+        enif_get_int(env, w[3], &wysize);
+        LOG("wx=%d, wy=%d, wxsize=%d, wysize=%d", wx, wy, wxsize, wysize);
+    }
+    else {
+        return enif_make_badarg(env);
+    }
+
+/* 
+    int querysize, tilesize, dataBoundsCount, tilebands;
+    int sarity;
+    const ERL_NIF_TERM* s;
+    if (enif_get_tuple(env, argv[3], &sarity, &s)) {
+        enif_get_int(env, s[0], &querysize);
+        enif_get_int(env, s[1], &tilesize);
+    }
+//*/        
+    GDALDatasetH dstile = GDALCreate(hMemDriver, 
+                                     "", handle->tilesize, handle->tilesize, handle->tilebands, 
+                                     GDT_Byte, NULL);
+
+    GByte data[wxsize * wysize * (handle->dataBandsCount)];
+    //GByte* data = (GByte*)CPLCalloc(wxsize * wysize * handle->dataBandsCount, sizeof(GByte));
+
+    int panBandMap[handle->dataBandsCount];
+    for (int i = 0; i < handle->dataBandsCount; ++i) {
+        panBandMap[i] = i + 1;
+    }
+    CPLErr eErr = GDALDatasetRasterIO(ds, GF_Read, 
+                                      rx, ry, rxsize, rysize, data, 
+                                      wxsize, wysize, GDT_Byte, handle->dataBandsCount, panBandMap, 
+                                      0, 0, 0);
+    if (eErr == CE_Failure) {
+        LOG("DatasetRasterIO read failed");
+    }
+
+    GByte alpha[wxsize * wysize * 1];
+    //GByte* alpha = (GByte*)CPLCalloc(wxsize * wysize, sizeof(GByte));
+    eErr = GDALRasterIO(handle->alphaBand, GF_Read, 
+                        rx, ry, rxsize, rysize, alpha, wxsize, wysize, 
+                        GDT_Byte, 0, 0);
+
+    if (eErr == CE_Failure) {
+        LOG("RasterIO read failed");
+    }
+
+    if (handle->tilesize == handle->querysize) {
+        //GDALDataType ntype = GDALGetRasterDataType( GDALGetRasterBand( dstile, GDALGetRasterCount(dstile) - 1 ) );
+        // Use the ReadRaster result directly in tiles ('nearest neighbour' query)
+        eErr = GDALDatasetRasterIO(dstile, GF_Write,
+                            wx, wy, wxsize, wysize, data, 
+                            wxsize, wysize, GDT_Byte, 0, NULL, 
+                            0, 0, 0);
+        LOG("WriteRaster failed");
+
+        int pBandList[] = {handle->tilebands};
+        eErr = GDALDatasetRasterIO(dstile, GF_Write,
+                                   wx, wy, wxsize, wysize, alpha, 
+                                   wxsize, wysize, GDT_Byte, 0, pBandList, 
+                                   0, 0, 0);
+        LOG("WriteRaster failed");
+
+        // Note: For source drivers based on WaveLet compression (JPEG2000, ECW, MrSID)
+        // the ReadRaster function returns high-quality raster (not ugly nearest neighbour)
+        // TODO: Use directly 'near' for WaveLet files
+    }
+    else {
+        // Big ReadRaster query in memory scaled to the tilesize - all but 'near' algo
+        GDALDatasetH dsquery = GDALCreate(hMemDriver, 
+                                          "", handle->querysize, handle->querysize, handle->tilebands, 
+                                          GDT_Byte, NULL);
+
+        eErr = GDALDatasetRasterIO(dsquery, GF_Write,
+                            wx, wy, wxsize, wysize, data, 
+                            wxsize, wysize, GDT_Byte, 0, NULL, 
+                            0, 0, 0);
+        LOG("WriteRaster failed");
+
+        int pBandList[] = {handle->tilebands};
+        eErr = GDALDatasetRasterIO(dsquery, GF_Write,
+                                   wx, wy, wxsize, wysize, alpha, 
+                                   wxsize, wysize, GDT_Byte, 0, pBandList, 
+                                   0, 0, 0);
+        LOG("WriteRaster failed");
+
+        char* tilefilename = "";
+        scale_query_to_tile(handle, dsquery, dstile, tilefilename);
+
+        GDALClose(dsquery);
+        dsquery = NULL;
+    }
+
+    if (strcmp("antialias", handle->resampling) != 0) {
+        LOG("Write a copy of tile to png/jpg");
+    }
+    GDALClose(dstile);
+    dstile = NULL;
+
+    return ATOM_OK;
 }
 
 static ERL_NIF_TERM gdal_nif_get_meta(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
@@ -408,6 +561,7 @@ static ErlNifFunc nif_funcs[] =
     {"calc_srs", 1, gdal_nif_calc_srs},
     {"warp_dataset", 1, gdal_nif_warp_dataset},
     {"calc_data_bandscount", 1, gdal_nif_calc_data_bandscount},
+    {"create_mem_dstile", 3, gdal_nif_create_mem_dstile},
     {"get_meta", 1, gdal_nif_get_meta},
 
     {"close", 1, gdal_nif_close}
