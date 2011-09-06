@@ -98,7 +98,7 @@ geo_query({OriginX, OriginY, PixelSizeX, PixelSizeY, RasterXSize, RasterYSize} =
 %% ===================================================================
 
 %% @doc Coordinates should not go out of the bounds of the raster
--spec adjust_byedge(integer(), integer(), integer(), non_neg_integer()) -> bandregion().
+-spec adjust_byedge(integer(), integer(), non_neg_integer(), non_neg_integer()) -> bandregion().
 adjust_byedge(R, Rsize, RasterSize, QuerySize) ->
     if
         QuerySize == 0 ->

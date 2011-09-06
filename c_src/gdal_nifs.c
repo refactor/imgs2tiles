@@ -338,9 +338,9 @@ static CPLErr scale_query_to_tile(gdal_dataset_handle* handle, GDALDatasetH dsqu
     return CE_None;
 }
 
-static ERL_NIF_TERM gdal_nif_create_mem_dstile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM gdal_nif_cut_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    LOG("gdal_nif_calc_create_mem_dstile is calling, arity = %d", argc);
+    LOG("gdal_nif_calc_cut_tile is calling, arity = %d", argc);
 
     // int querysize = 256 * 4, tilesize = 256, dataBandsCount, tilebands;
 
@@ -384,6 +384,10 @@ static ERL_NIF_TERM gdal_nif_create_mem_dstile(ErlNifEnv* env, int argc, const E
     else {
         return enif_make_badarg(env);
     }
+
+    char tilefilename[256];
+    enif_get_string(env, argv[3], tilefilename, 256, ERL_NIF_LATIN1);
+    LOG("tilefilename: %s", tilefilename);
 
 /* 
     int querysize, tilesize, dataBoundsCount, tilebands;
@@ -462,11 +466,20 @@ static ERL_NIF_TERM gdal_nif_create_mem_dstile(ErlNifEnv* env, int argc, const E
                                    0, 0, 0);
         LOG("WriteRaster failed");
 
-        char* tilefilename = "";
         scale_query_to_tile(handle, dsquery, dstile, tilefilename);
 
         GDALClose(dsquery);
         dsquery = NULL;
+
+        if (handle->options_resampline && strcmp("antialias", handle->options_resampline) != 0) {
+            GDALDatasetH tileDataset = GDALCreateCopy(hOutDriver,
+                                                      tilefilename, dstile, 
+                                                      FALSE, NULL, NULL, NULL);
+            GDALClose(tileDataset);
+        }
+
+        GDALClose(dstile);
+        dstile = NULL;
     }
 
     if (handle->resampling && strcmp("antialias", handle->resampling) != 0) {
@@ -623,7 +636,7 @@ static ErlNifFunc nif_funcs[] =
     {"calc_srs", 1, gdal_nif_calc_srs},
     {"warp_dataset", 1, gdal_nif_warp_dataset},
     {"calc_data_bandscount", 1, gdal_nif_calc_data_bandscount},
-    {"create_mem_dstile", 3, gdal_nif_create_mem_dstile},
+    {"cut_tile", 4, gdal_nif_cut_tile},
     {"get_meta", 1, gdal_nif_get_meta},
 
     {"close", 1, gdal_nif_close}

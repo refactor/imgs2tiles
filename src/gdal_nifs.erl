@@ -5,7 +5,7 @@
         close/1]).
 -export([get_meta/1]).
 -export([calc_zoomlevel_range/1, 
-         create_mem_dstile/3,
+         cut_tile/4,
          calc_swne/1, 
          calc_tminmax/1]).
 -export([generate_base_tiles/1]).
@@ -154,8 +154,8 @@ calc_data_bandscount(_Ref) ->
         _   -> exit("NIF library not loaded")
     end.
 
--spec create_mem_dstile(reference(), bandregion(), bandregion()) -> ok.
-create_mem_dstile(_Ref, _R, _W) ->
+-spec cut_tile(reference(), bandregion(), bandregion(), string()) -> ok.
+cut_tile(_Ref, _R, _W, _FileName) ->
     ok.
 
 -spec warp_dataset(reference()) -> {ok, datasetinfo()}.
