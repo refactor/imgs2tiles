@@ -12,10 +12,13 @@
 
 -include("gdal2tiles.hrl").
 
+-define(OUTPUT, "/tmp").
+-define(TILE_EXT, "png").
+
 % QuerySize: How big should be query window be for scaling down
 % Later on reset according the chosen resampling algorightm
--type metainfo() :: {QuerySize::non_neg_integer(), TileSize::non_neg_integer(), DataBandsCount::non_neg_integer(), TileBands::non_neg_integer()}.
--type imghandler() :: {reference(), datasetinfo(), metainfo()}.
+-type sizeinfo() :: {QuerySize::non_neg_integer(), TileSize::non_neg_integer()}.
+-type imghandler() :: {reference(), datasetinfo(), sizeinfo()}.
 
 -on_load(init/0).
 
@@ -37,8 +40,8 @@ open(Filename) ->
             calc_nodatavalue(Hdataset),
             calc_srs(Hdataset),
             {ok, DatasetInfo} = warp_dataset(Hdataset),
-            DataBandsCount = calc_data_bandscount(Hdataset),
-            {ok, {Hdataset, DatasetInfo, {4 * ?TILE_SIZE, ?TILE_SIZE, DataBandsCount, DataBandsCount + 1}}};
+            _DataBandsCount = calc_data_bandscount(Hdataset),
+            {ok, {Hdataset, DatasetInfo, {4 * ?TILE_SIZE, ?TILE_SIZE}}};
         {error, _} = Err ->
             Err
     end.
@@ -54,32 +57,54 @@ get_meta(Ref) ->
     erlang:error(function_clause, ["NIF library not loaded",Ref]).
 
 %% @doc Generation of the base tiles (the lowest in the pyramid) directly from the input raster
-generate_base_tiles({Ref, DatasetInfo, {QuerySize, _TileSize, _DataBandsCount, _TileBands}} = ImgHandler) ->
+-spec generate_base_tiles(imghandler()) -> ok.
+generate_base_tiles({_Ref, DatasetInfo, _SizeInfo} = ImgHandler) ->
     %    LOG("Generating Base Tiles:");
-    {Tminz, Tmaxz} = calc_zoomlevel_range(ImgHandler),
+    {_Tminz, Tmaxz} = calc_zoomlevel_range(ImgHandler),
     Tminmax = calc_tminmax(DatasetInfo),
     % Set the bounds
     {Tminx, Tminy, Tmaxx, Tmaxy} = lists:nth(Tmaxz + 1, Tminmax),
-    TCount = (1 + abs(Tmaxx - Tminx)) * (1 + abs(Tmaxy - Tminy)),
+    _TCount = (1 + abs(Tmaxx - Tminx)) * (1 + abs(Tmaxy - Tminy)),
 
-    generate_tiles_for(Tmaxy, Tminy, Tminx, Tmaxx, Tmaxz,   DatasetInfo, QuerySize).
+    generate_tiles_alone_y(Tmaxy, Tminy - 1, Tminx, Tmaxx + 1, Tmaxz, ImgHandler).
 
 
 %% ---------------------------------------------------
 %% private function
 %% ---------------------------------------------------
-
-generate_tiles_for(Tminy, Tminy, Tmaxx, Tmaxx, Tz, DatasetInfo, _QuerySize) ->
+-spec generate_tiles_alone_y(integer(), integer(), integer(), integer(), byte(), imghandler()) -> ok.
+generate_tiles_alone_y(Tminy, Tminy, _Tminx, _Tmaxx, _Tmaxz, _ImgHandler) ->
     ok;
-generate_tiles_for(Ty, Tminy, Tx, Tmaxx, Tz, DatasetInfo, QuerySize) when Ty > Tminy, Tx < Tmaxx ->
+generate_tiles_alone_y(Ty, Tminy, Tminx, Tmaxx, Tmaxz, ImgHandler) ->
+    generate_tiles_alone_x(Ty, Tminx, Tmaxx, Tmaxz, ImgHandler),
+    generate_tiles_alone_y(Ty - 1, Tminy, Tminx, Tmaxx, Tmaxz, ImgHandler).
+
+-spec generate_tiles_alone_x(integer(), integer(), integer(), byte(), imghandler()) -> ok.
+generate_tiles_alone_x(_Ty, Tmaxx, Tmaxx, _Tmaxz, _ImgHandler) ->
+    ok;
+generate_tiles_alone_x(Ty, Tx, Tmaxx, Tmaxz, ImgHandler) ->
+    cut_tile_for(Ty, Tx, Tmaxz, ImgHandler),
+    generate_tiles_alone_x(Ty, Tx + 1, Tmaxx, Tmaxz, ImgHandler).
+
+
+-spec cut_tile_for(integer(), integer(), byte(), imghandler()) -> ok.
+cut_tile_for(Ty, Tx, Tz, {Ref, DatasetInfo, {QuerySize, _TileSize}} = _ImgHandler) ->
+    % Create directories for the tile
+    file:make_dir(filename:join([?OUTPUT, integer_to_list(Tz)])),
+    file:make_dir(filename:join([?OUTPUT, integer_to_list(Tz), integer_to_list(Tx)])),
+    
+    TileFilename = filename:join([?OUTPUT, integer_to_list(Tz), integer_to_list(Tx), integer_to_list(Ty) ++ "." ++ ?TILE_EXT]),
+    io:format("tilefilename: ~p~n", [TileFilename]),
+
+    % Tile bounds in EPSG:900913
     {MinX, MinY, MaxX, MaxY} = mercator_tiles:tile_enclosure(Tx, Ty, Tz),
     Bound = {MinX, MaxY, MaxX, MinY},
+
     {Rb, Wb} = mercator_tiles:geo_query(DatasetInfo, Bound, QuerySize),
 
-    {Rx, Ry, RxSize, RySize} = Rb,
-    {Wx, Wy, WxSize, WySize} = Wb,
-
-    {Rb, Wb}.
+    io:format("ReadRaster Extend: ~p ~p~n", [Rb, Wb]),
+    
+    cut_tile(Ref, Rb, Wb, TileFilename).
 
 
 calc_tminmax(DatasetInfo) ->
@@ -109,8 +134,8 @@ get_enclosure(DatasetInfo) ->
 %% @doc Get the minimal and maximal zoom level
 %% minimal zoom level: map covers area equivalent to one tile
 %% maximal zoom level: closest possible zoom level up on the resolution of raster
--spec calc_zoomlevel_range(imghandler()) -> {integer(), integer()}.
-calc_zoomlevel_range({Ref, DatasetInfo, _SizeInfo}) ->
+-spec calc_zoomlevel_range(imghandler()) -> {byte(), byte()}.
+calc_zoomlevel_range({_Ref, DatasetInfo, _SizeInfo}) ->
     {_OriginX, _OriginY, PixelSizeX, _PixelSizeY, RasterXSize, RasterYSize} = DatasetInfo,
     Tminz = mercator_tiles:zoom_for_pixelsize( PixelSizeX * max( RasterXSize, RasterYSize) / ?TILE_SIZE ),
     Tmaxz = mercator_tiles:zoom_for_pixelsize( PixelSizeX ),
