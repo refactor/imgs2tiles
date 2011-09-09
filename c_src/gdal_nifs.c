@@ -30,8 +30,7 @@ typedef struct
     GDALRasterBandH alphaBand;
     int querysize, tilesize, dataBandsCount, tilebands;
 
-    const char* resampling;
-    const char* options_resampline;
+    const char* options_resampling;
 
     nodata_values* inNodata;
     
@@ -73,7 +72,7 @@ static ERL_NIF_TERM gdal_nif_open_img(ErlNifEnv* env, int argc, const ERL_NIF_TE
                                                     gdal_datasets_RESOURCE, 
                                                     sizeof(gdal_dataset_handle));
             memset(handle, '\0', sizeof(*handle));
-            handle->resampling = "average";
+            handle->options_resampling = "average";
             handle->querysize = 256 * 4;
             handle->tilesize = 256;
 
@@ -272,22 +271,22 @@ static ERL_NIF_TERM gdal_nif_calc_data_bandscount(ErlNifEnv* env, int argc, cons
     }
 }
 
-static GDALResampleAlg parse_resampling(const char* resampling) 
+static GDALResampleAlg parse_resampling(const char* option_resampling) 
 {
-    if (resampling != NULL) {
-        if (strcmp("near", resampling) == 0) {
+    if (option_resampling != NULL) {
+        if (strcmp("near", option_resampling) == 0) {
             return GRA_NearestNeighbour;
         }
-        else if (strcmp("bilinear", resampling) == 0) {
+        else if (strcmp("bilinear", option_resampling) == 0) {
             return GRA_Bilinear;
         }
-        else if (strcmp("cubic", resampling) == 0) {
+        else if (strcmp("cubic", option_resampling) == 0) {
             return GRA_Cubic;
         }
-        else if (strcmp("cubicspline", resampling) == 0) {
+        else if (strcmp("cubicspline", option_resampling) == 0) {
             return GRA_CubicSpline;
         }
-        else if (strcmp("lanczos", resampling) == 0) {
+        else if (strcmp("lanczos", option_resampling) == 0) {
             return GRA_Lanczos;
         }
         else { 
@@ -310,7 +309,7 @@ static CPLErr scale_query_to_tile(gdal_dataset_handle* handle, GDALDatasetH dsqu
     LOG("scale_query_to_tile is calling ... tilefilename = %s, querysize: %d, tilesize: %d, tilebands: %d", 
             tilefilename, querysize, tilesize, tilebands);
 
-    if (handle->options_resampline && strcmp("average", handle->options_resampline) == 0) {
+    if (handle->options_resampling && strcmp("average", handle->options_resampling) == 0) {
         LOG("sample average");
         for (int i = 1; i < tilebands + 1; ++i) {
             CPLErrorReset();
@@ -323,7 +322,7 @@ static CPLErr scale_query_to_tile(gdal_dataset_handle* handle, GDALDatasetH dsqu
             }
         }
     }
-    else if (handle->options_resampline && strcmp("antialias", handle->options_resampline) == 0) {
+    else if (handle->options_resampling && strcmp("antialias", handle->options_resampling) == 0) {
         // TODO
         LOG("Scaling by PIL (Python Imaging Library) - improved Lanczos");
     }
@@ -334,7 +333,7 @@ static CPLErr scale_query_to_tile(gdal_dataset_handle* handle, GDALDatasetH dsqu
         GDALSetGeoTransform(dstile, (double []){0.0, 1.0, 0.0, 0.0, 0.0, 1.0});
 
         CPLErrorReset();
-        CPLErr eErr = GDALReprojectImage(dsquery, NULL, dstile, NULL, parse_resampling(handle->resampling), 0.0, 0.0, NULL, NULL, NULL); 
+        CPLErr eErr = GDALReprojectImage(dsquery, NULL, dstile, NULL, parse_resampling(handle->options_resampling), 0.0, 0.0, NULL, NULL, NULL); 
         if (eErr != CE_None) {
             LOG("GDALReprojectImage failed on %s, error %s", tilefilename, CPLGetLastErrorMsg());
             return eErr;
@@ -515,7 +514,7 @@ static ERL_NIF_TERM gdal_nif_cut_tile(ErlNifEnv* env, int argc, const ERL_NIF_TE
         GDALClose(dsquery);
     }
 
-    if ( ! handle->options_resampline || (strcmp("antialias", handle->options_resampline) != 0) ) {
+    if ( ! handle->options_resampling || (strcmp("antialias", handle->options_resampling) != 0) ) {
         LOG("Write a copy of tile to png/jpg");
         GDALDatasetH tileDataset = GDALCreateCopy(hOutDriver,
                                                   tilefilename, dstile, 
@@ -528,7 +527,7 @@ static ERL_NIF_TERM gdal_nif_cut_tile(ErlNifEnv* env, int argc, const ERL_NIF_TE
     CPLFree(alpha);
     data = NULL;
 
-    if (handle->resampling && strcmp("antialias", handle->resampling) != 0) {
+    if (handle->options_resampling && strcmp("antialias", handle->options_resampling) != 0) {
         LOG("Write a copy of tile to png/jpg");
     }
     GDALClose(dstile);
