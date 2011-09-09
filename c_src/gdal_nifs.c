@@ -5,6 +5,7 @@
 #include "gdal.h"
 #include "cpl_conv.h"
 #include "cpl_string.h"
+#include "cpl_error.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -301,19 +302,23 @@ static GDALResampleAlg parse_resampling(const char* resampling)
 
 static CPLErr scale_query_to_tile(gdal_dataset_handle* handle, GDALDatasetH dsquery, GDALDatasetH dstile, const char* tilefilename)
 {
-    LOG("scale_query_to_tile is calling ... tilefilename = %s", tilefilename);
+    LOG("Scales down query dataset to the tile dataset");
+
     int querysize = GDALGetRasterXSize(dsquery);
     int tilesize = GDALGetRasterXSize(dstile);
     int tilebands = GDALGetRasterCount(dstile);
+    LOG("scale_query_to_tile is calling ... tilefilename = %s, querysize: %d, tilesize: %d, tilebands: %d", 
+            tilefilename, querysize, tilesize, tilebands);
 
     if (handle->options_resampline && strcmp("average", handle->options_resampline) == 0) {
+        LOG("sample average");
         for (int i = 1; i < tilebands + 1; ++i) {
             CPLErrorReset();
 
             GDALRasterBandH overviewBand = GDALGetRasterBand(dstile, i);
             CPLErr eErr = GDALRegenerateOverviews(GDALGetRasterBand(dsquery, i), 1, &overviewBand, "average", NULL, NULL);
             if (eErr != CE_None) {
-                LOG("GDALRegenerateOverviews failed on %s, error %d", tilefilename, eErr);
+                LOG("GDALRegenerateOverviews failed on %s(band: %d), error: %s", tilefilename, i, CPLGetLastErrorMsg());
                 return eErr;
             }
         }
@@ -323,6 +328,7 @@ static CPLErr scale_query_to_tile(gdal_dataset_handle* handle, GDALDatasetH dsqu
         LOG("Scaling by PIL (Python Imaging Library) - improved Lanczos");
     }
     else {
+        LOG("other sampling algorithms");
         // Other algorithms are implemented by gdal.ReprojectImage().
         GDALSetGeoTransform(dsquery, (double []){0.0, tilesize / ((double)querysize), 0.0, 0.0, 0.0, tilesize / ((double)querysize)});
         GDALSetGeoTransform(dstile, (double []){0.0, 1.0, 0.0, 0.0, 0.0, 1.0});
@@ -330,12 +336,19 @@ static CPLErr scale_query_to_tile(gdal_dataset_handle* handle, GDALDatasetH dsqu
         CPLErrorReset();
         CPLErr eErr = GDALReprojectImage(dsquery, NULL, dstile, NULL, parse_resampling(handle->resampling), 0.0, 0.0, NULL, NULL, NULL); 
         if (eErr != CE_None) {
-            LOG("GDALReprojectImage failed on %s, error %d", tilefilename, eErr);
+            LOG("GDALReprojectImage failed on %s, error %s", tilefilename, CPLGetLastErrorMsg());
             return eErr;
         }
     }
 
     return CE_None;
+}
+
+static void fill_pband_list(int n, int band_list[n])
+{
+    for (int i = 0; i < n; ++i) {
+        band_list[i] = i + 1;
+    }
 }
 
 static ERL_NIF_TERM gdal_nif_cut_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
@@ -397,90 +410,123 @@ static ERL_NIF_TERM gdal_nif_cut_tile(ErlNifEnv* env, int argc, const ERL_NIF_TE
         enif_get_int(env, s[0], &querysize);
         enif_get_int(env, s[1], &tilesize);
     }
-//*/        
+// */        
+    LOG("Tile dataset in memory");
+    CPLErrorReset();
     GDALDatasetH dstile = GDALCreate(hMemDriver, 
                                      "", handle->tilesize, handle->tilesize, handle->tilebands, 
                                      GDT_Byte, NULL);
 
-    GByte data[wxsize * wysize * (handle->dataBandsCount)];
-    //GByte* data = (GByte*)CPLCalloc(wxsize * wysize * handle->dataBandsCount, sizeof(GByte));
+    //GByte data[wxsize * wysize * (handle->dataBandsCount)];
+    GByte* data = (GByte*)CPLCalloc(wxsize * wysize * handle->dataBandsCount, sizeof(GByte));
 
     int panBandMap[handle->dataBandsCount];
-    for (int i = 0; i < handle->dataBandsCount; ++i) {
-        panBandMap[i] = i + 1;
-    }
+    fill_pband_list(handle->dataBandsCount, panBandMap);
+    LOG("panBandMap[%zu] = {%d, %d, %d}", sizeof(panBandMap)/sizeof(int), panBandMap[0], panBandMap[1], panBandMap[2]);
+
+    CPLErrorReset();
     CPLErr eErr = GDALDatasetRasterIO(ds, GF_Read, 
                                       rx, ry, rxsize, rysize, data, 
                                       wxsize, wysize, GDT_Byte, handle->dataBandsCount, panBandMap, 
                                       0, 0, 0);
     if (eErr == CE_Failure) {
-        LOG("DatasetRasterIO read failed");
+        LOG("DatasetRasterIO read failed: %s", CPLGetLastErrorMsg());
     }
+    LOG("ds.ReadRaster");
 
-    GByte alpha[wxsize * wysize * 1];
-    //GByte* alpha = (GByte*)CPLCalloc(wxsize * wysize, sizeof(GByte));
+    //GByte alpha[wxsize * wysize * 1];
+    GByte* alpha = (GByte*)CPLCalloc(wxsize * wysize, sizeof(GByte));
+
+    CPLErrorReset();
     eErr = GDALRasterIO(handle->alphaBand, GF_Read, 
                         rx, ry, rxsize, rysize, alpha, wxsize, wysize, 
                         GDT_Byte, 0, 0);
 
     if (eErr == CE_Failure) {
-        LOG("RasterIO read failed");
+        LOG("RasterIO read failed: %s", CPLGetLastErrorMsg());
     }
+    LOG("self.alphaband.ReadRaster");
 
     if (handle->tilesize == handle->querysize) {
+        LOG("tilesize(%d) == querysize(%d)", handle->tilesize, handle->querysize);
         //GDALDataType ntype = GDALGetRasterDataType( GDALGetRasterBand( dstile, GDALGetRasterCount(dstile) - 1 ) );
         // Use the ReadRaster result directly in tiles ('nearest neighbour' query)
+        CPLErrorReset();
         eErr = GDALDatasetRasterIO(dstile, GF_Write,
                             wx, wy, wxsize, wysize, data, 
                             wxsize, wysize, GDT_Byte, 0, NULL, 
                             0, 0, 0);
-        LOG("WriteRaster failed");
+        if (eErr == CE_Failure) {
+            LOG("data WriteRaster failed: %s", CPLGetLastErrorMsg());
+        }
 
+        CPLErrorReset();
         int pBandList[] = {handle->tilebands};
         eErr = GDALDatasetRasterIO(dstile, GF_Write,
                                    wx, wy, wxsize, wysize, alpha, 
                                    wxsize, wysize, GDT_Byte, 0, pBandList, 
                                    0, 0, 0);
-        LOG("WriteRaster failed");
+        if (eErr == CE_Failure) {
+            LOG("alpha WriteRaster failed: %s", CPLGetLastErrorMsg());
+        }
 
         // Note: For source drivers based on WaveLet compression (JPEG2000, ECW, MrSID)
         // the ReadRaster function returns high-quality raster (not ugly nearest neighbour)
         // TODO: Use directly 'near' for WaveLet files
     }
     else {
+        LOG("tilesize(%d) != querysize(%d)", handle->tilesize, handle->querysize);
+
+        CPLErrorReset();
         // Big ReadRaster query in memory scaled to the tilesize - all but 'near' algo
         GDALDatasetH dsquery = GDALCreate(hMemDriver, 
                                           "", handle->querysize, handle->querysize, handle->tilebands, 
                                           GDT_Byte, NULL);
+        LOG("create dsquery MEM dataset");
+
+        CPLErrorReset();
+
+        int band_list[handle->dataBandsCount];
+        fill_pband_list(handle->dataBandsCount, band_list);
 
         eErr = GDALDatasetRasterIO(dsquery, GF_Write,
                             wx, wy, wxsize, wysize, data, 
-                            wxsize, wysize, GDT_Byte, 0, NULL, 
+                            wxsize, wysize, GDT_Byte, 
+                            handle->dataBandsCount, band_list,
                             0, 0, 0);
-        LOG("WriteRaster failed");
+        if (eErr == CE_Failure) {
+            LOG("data WriteRaster dsquery failed: %s", CPLGetLastErrorMsg());
+            LOG("dsquery.WriteRaster(wx: %d, wy: %d, wxsize: %d, wysize: %d, data: %p, ", wx, wy, wxsize, wysize, data);
+        }
 
+        CPLErrorReset();
         int pBandList[] = {handle->tilebands};
         eErr = GDALDatasetRasterIO(dsquery, GF_Write,
                                    wx, wy, wxsize, wysize, alpha, 
-                                   wxsize, wysize, GDT_Byte, 0, pBandList, 
+                                   wxsize, wysize, GDT_Byte, 
+                                   1, pBandList, 
                                    0, 0, 0);
-        LOG("WriteRaster failed");
+        if (eErr == CE_Failure) {
+            LOG("alpha WriteRaster dsquery failed: %s", CPLGetLastErrorMsg());
+        }
 
         scale_query_to_tile(handle, dsquery, dstile, tilefilename);
 
         GDALClose(dsquery);
-        dsquery = NULL;
-
-        if (handle->options_resampline && strcmp("antialias", handle->options_resampline) != 0) {
-            GDALDatasetH tileDataset = GDALCreateCopy(hOutDriver,
-                                                      tilefilename, dstile, 
-                                                      FALSE, NULL, NULL, NULL);
-            GDALClose(tileDataset);
-        }
-
-        GDALClose(dstile);
-        dstile = NULL;
     }
+
+    if ( ! handle->options_resampline || (strcmp("antialias", handle->options_resampline) != 0) ) {
+        LOG("Write a copy of tile to png/jpg");
+        GDALDatasetH tileDataset = GDALCreateCopy(hOutDriver,
+                                                  tilefilename, dstile, 
+                                                  FALSE, NULL, NULL, NULL);
+        GDALClose(tileDataset);
+    }
+
+    CPLFree(data);
+    data = NULL;
+    CPLFree(alpha);
+    data = NULL;
 
     if (handle->resampling && strcmp("antialias", handle->resampling) != 0) {
         LOG("Write a copy of tile to png/jpg");
