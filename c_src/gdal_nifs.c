@@ -56,6 +56,15 @@ typedef struct
     int ysize;
 } bandregion;
 
+typedef struct
+{
+    GDALDatasetH dstile;
+    GByte* data;
+    GByte* alpha;
+    const char* tilefilename;
+    bandregion w;
+} tileinfo;
+
 // Atoms (initialized in on_load)
 static ERL_NIF_TERM ATOM_ALLOCATION_ERROR;
 static ERL_NIF_TERM ATOM_ERROR;
@@ -385,9 +394,14 @@ static void free_and_close(GDALDatasetH ds, GByte* data, GByte* alpha)
         CPLFree(alpha);
     }
 }
-static void generate_tile(gdal_dataset_handle* handle, GDALDatasetH dstile, bandregion w, GByte* data, GByte* alpha, const char* tilefilename, 
-        GDALDriverH hOutDriver, GDALDatasetH hMemDriver)
+static void generate_tile(gdal_dataset_handle* handle, tileinfo ti, GDALDriverH hOutDriver, GDALDatasetH hMemDriver)
 {
+    GDALDatasetH dstile = ti.dstile;
+    GByte* data = ti.data;
+    GByte* alpha = ti.alpha;
+    const char* tilefilename = ti.tilefilename;
+    bandregion w = ti.w;
+
     CPLErr eErr;
     if (handle->tilesize == handle->querysize) {
         LOG("tilesize(%d) == querysize(%d)", handle->tilesize, handle->querysize);
@@ -489,9 +503,9 @@ static void generate_tile(gdal_dataset_handle* handle, GDALDatasetH dstile, band
     return;
 }
 
-static ERL_NIF_TERM gdal_nif_cut_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM gdal_nif_clone_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    LOG("gdal_nif_calc_cut_tile is calling, arity = %d", argc);
+    LOG("is calling, arity = %d", argc);
 
     // int querysize = 256 * 4, tilesize = 256, dataBandsCount, tilebands;
 
@@ -561,7 +575,14 @@ static ERL_NIF_TERM gdal_nif_cut_tile(ErlNifEnv* env, int argc, const ERL_NIF_TE
     }
     LOG("self.alphaband.ReadRaster");
 
-    generate_tile(handle, dstile, w, data, alpha, tilefilename, hOutDriver, hMemDriver);
+    tileinfo ti = {
+        dstile,
+        data,
+        alpha,
+        tilefilename,
+        w
+    };
+    generate_tile(handle, ti, hOutDriver, hMemDriver);
 
     return ATOM_OK;
 }
@@ -711,7 +732,7 @@ static ErlNifFunc nif_funcs[] =
     {"calc_srs", 1, gdal_nif_calc_srs},
     {"warp_dataset", 1, gdal_nif_warp_dataset},
     {"calc_data_bandscount", 1, gdal_nif_calc_data_bandscount},
-    {"cut_tile", 4, gdal_nif_cut_tile},
+    {"clone_tile", 4, gdal_nif_clone_tile},
     {"get_meta", 1, gdal_nif_get_meta},
 
     {"close_ref", 1, gdal_nif_close}

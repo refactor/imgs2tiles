@@ -5,7 +5,7 @@
         close/1]).
 -export([get_meta/1]).
 -export([calc_zoomlevel_range/1, 
-         cut_tile/4,
+         clone_tile/4,
          calc_swne/1, 
          calc_tminmax/1]).
 -export([generate_base_tiles/1]).
@@ -18,6 +18,9 @@
 % QuerySize: How big should be query window be for scaling down
 % Later on reset according the chosen resampling algorightm
 -type sizeinfo() :: {QuerySize::non_neg_integer(), TileSize::non_neg_integer()}.
+
+-type tileinfo() :: {DatasetTile::reference(), Data::reference(), Alpha::reference(), TileFilename::string(), W::bandregion()}.
+
 -type imghandler() :: {reference(), datasetinfo(), sizeinfo()}.
 
 -on_load(init/0).
@@ -88,12 +91,12 @@ generate_tiles_alone_y(Ty, Tminy, Tminx, Tmaxx, Tmaxz, ImgHandler) ->
 generate_tiles_alone_x(_Ty, Tmaxx, Tmaxx, _Tmaxz, _ImgHandler) ->
     ok;
 generate_tiles_alone_x(Ty, Tx, Tmaxx, Tmaxz, ImgHandler) ->
-    cut_tile_for(Ty, Tx, Tmaxz, ImgHandler),
+    {ok, _TileInfo} = clone_tile_for(Ty, Tx, Tmaxz, ImgHandler),
     generate_tiles_alone_x(Ty, Tx + 1, Tmaxx, Tmaxz, ImgHandler).
 
 
--spec cut_tile_for(integer(), integer(), byte(), imghandler()) -> ok.
-cut_tile_for(Ty, Tx, Tz, {Ref, DatasetInfo, {QuerySize, _TileSize}} = _ImgHandler) ->
+-spec clone_tile_for(integer(), integer(), byte(), imghandler()) -> {ok, tileinfo()} | {error, string()}.
+clone_tile_for(Ty, Tx, Tz, {Ref, DatasetInfo, {QuerySize, _TileSize}} = _ImgHandler) ->
     % Create directories for the tile
     file:make_dir(filename:join([?OUTPUT, integer_to_list(Tz)])),
     file:make_dir(filename:join([?OUTPUT, integer_to_list(Tz), integer_to_list(Tx)])),
@@ -109,7 +112,7 @@ cut_tile_for(Ty, Tx, Tz, {Ref, DatasetInfo, {QuerySize, _TileSize}} = _ImgHandle
 
     io:format("ReadRaster Extend: ~p ~p~n", [Rb, Wb]),
     
-    cut_tile(Ref, Rb, Wb, TileFilename).
+    clone_tile(Ref, Rb, Wb, TileFilename).
 
 
 calc_tminmax(DatasetInfo) ->
@@ -184,9 +187,13 @@ calc_data_bandscount(_Ref) ->
         _   -> exit("NIF library not loaded")
     end.
 
--spec cut_tile(reference(), bandregion(), bandregion(), string()) -> ok.
-cut_tile(_Ref, _R, _W, _FileName) ->
-    ok.
+-spec clone_tile(reference(), bandregion(), bandregion(), string()) -> {ok, tileinfo()} | {error, string()}.
+clone_tile(_Ref, _R, _W, _FileName) ->
+    case random:uniform(999999999999) of
+        666 -> {ok, {make_ref(), make_ref(), make_ref(), make_bogus_string(), make_bogus_bandregion()}};
+        999 -> {error, make_bogus_string()};
+        _   -> exit("NIF library not loaded")
+    end.
 
 -spec warp_dataset(reference()) -> {ok, datasetinfo()}.
 warp_dataset(_Ref) ->
@@ -210,3 +217,8 @@ make_bogus_float() ->
 make_bogus_datasetinfo() ->
     {make_bogus_float(), make_bogus_float(), make_bogus_float(), make_bogus_float(), make_bogus_non_neg(), make_bogus_non_neg()}.
 
+make_bogus_bandregion() ->
+    {make_bogus_non_neg(), make_bogus_non_neg(), make_bogus_non_neg(), make_bogus_non_neg()}.
+
+make_bogus_string() ->
+    integer_to_list(random:uniform(99999999)).
