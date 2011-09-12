@@ -373,70 +373,10 @@ static int get_bandregion_from(ErlNifEnv* env, const ERL_NIF_TERM *pterm, bandre
     return res;
 }
 
-static ERL_NIF_TERM gdal_nif_cut_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static void generate_tile(gdal_dataset_handle* handle, GDALDatasetH dstile, bandregion w, GByte* data, GByte* alpha, const char* tilefilename, 
+        GDALDriverH hOutDriver, GDALDatasetH hMemDriver)
 {
-    LOG("gdal_nif_calc_cut_tile is calling, arity = %d", argc);
-
-    // int querysize = 256 * 4, tilesize = 256, dataBandsCount, tilebands;
-
-    gdal_priv_data* priv_data = (gdal_priv_data*) enif_priv_data(env);   
-    GDALDriverH  hOutDriver = priv_data->hOutDriver;
-    GDALDriverH  hMemDriver = priv_data->hMemDriver;
-
-    GDALDatasetH ds = NULL;
-    gdal_dataset_handle* handle = NULL;
-    if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
-        ds = handle->out_ds;
-    }
-    else {
-        return enif_make_badarg(env);
-    }
-        
-    bandregion r, w;
-    if (!get_bandregion_from(env, argv + 1, &r) || !get_bandregion_from(env, argv + 2, &w)) {
-        return enif_make_badarg(env);
-    }
-
-    char tilefilename[256];
-    enif_get_string(env, argv[3], tilefilename, 256, ERL_NIF_LATIN1);
-    LOG("tilefilename: %s", tilefilename);
-
-    LOG("Tile dataset in memory");
-    CPLErrorReset();
-    GDALDatasetH dstile = GDALCreate(hMemDriver, 
-                                     "", handle->tilesize, handle->tilesize, handle->tilebands, 
-                                     GDT_Byte, NULL);
-
-    //GByte data[wxsize * wysize * (handle->dataBandsCount)];
-    GByte* data = (GByte*)CPLCalloc(w.xsize * w.ysize * handle->dataBandsCount, sizeof(GByte));
-
-    int panBandMap[handle->dataBandsCount];
-    fill_pband_list(handle->dataBandsCount, panBandMap);
-    LOG("panBandMap[%zu] = {%d, %d, %d}", sizeof(panBandMap)/sizeof(int), panBandMap[0], panBandMap[1], panBandMap[2]);
-
-    CPLErrorReset();
-    CPLErr eErr = GDALDatasetRasterIO(ds, GF_Read, 
-                                      r.xoffset, r.yoffset, r.xsize, r.ysize, data, 
-                                      w.xsize, w.ysize, GDT_Byte, handle->dataBandsCount, panBandMap, 
-                                      0, 0, 0);
-    if (eErr == CE_Failure) {
-        LOG("DatasetRasterIO read failed: %s", CPLGetLastErrorMsg());
-    }
-    LOG("ds.ReadRaster");
-
-    //GByte alpha[wxsize * wysize * 1];
-    GByte* alpha = (GByte*)CPLCalloc(w.xsize * w.ysize, sizeof(GByte));
-
-    CPLErrorReset();
-    eErr = GDALRasterIO(handle->alphaBand, GF_Read, 
-                        r.xoffset, r.yoffset, r.xsize, r.ysize, alpha, w.xsize, w.ysize, 
-                        GDT_Byte, 0, 0);
-
-    if (eErr == CE_Failure) {
-        LOG("RasterIO read failed: %s", CPLGetLastErrorMsg());
-    }
-    LOG("self.alphaband.ReadRaster");
-
+    CPLErr eErr;
     if (handle->tilesize == handle->querysize) {
         LOG("tilesize(%d) == querysize(%d)", handle->tilesize, handle->querysize);
         //GDALDataType ntype = GDALGetRasterDataType( GDALGetRasterBand( dstile, GDALGetRasterCount(dstile) - 1 ) );
@@ -513,20 +453,81 @@ static ERL_NIF_TERM gdal_nif_cut_tile(ErlNifEnv* env, int argc, const ERL_NIF_TE
         GDALClose(tileDataset);
     }
 
-    if (handle->options_resampling && strcmp("antialias", handle->options_resampling) != 0) {
-        LOG("Write a copy of tile to png/jpg");
-    }
     GDALClose(dstile);
-    dstile = NULL;
 
     if (data != NULL) {
         CPLFree(data);
-        data = NULL;
     }
     if (alpha != NULL) {
         CPLFree(alpha);
-        alpha = NULL;
     }
+}
+
+static ERL_NIF_TERM gdal_nif_cut_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    LOG("gdal_nif_calc_cut_tile is calling, arity = %d", argc);
+
+    // int querysize = 256 * 4, tilesize = 256, dataBandsCount, tilebands;
+
+    gdal_priv_data* priv_data = (gdal_priv_data*) enif_priv_data(env);   
+    GDALDriverH  hOutDriver = priv_data->hOutDriver;
+    GDALDriverH  hMemDriver = priv_data->hMemDriver;
+
+    GDALDatasetH ds = NULL;
+    gdal_dataset_handle* handle = NULL;
+    if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
+        ds = handle->out_ds;
+    }
+    else {
+        return enif_make_badarg(env);
+    }
+        
+    bandregion r, w;
+    if (!get_bandregion_from(env, argv + 1, &r) || !get_bandregion_from(env, argv + 2, &w)) {
+        return enif_make_badarg(env);
+    }
+
+    char tilefilename[256];
+    enif_get_string(env, argv[3], tilefilename, 256, ERL_NIF_LATIN1);
+    LOG("tilefilename: %s", tilefilename);
+
+    LOG("Tile dataset in memory");
+    CPLErrorReset();
+    GDALDatasetH dstile = GDALCreate(hMemDriver, 
+                                     "", handle->tilesize, handle->tilesize, handle->tilebands, 
+                                     GDT_Byte, NULL);
+
+    //GByte data[wxsize * wysize * (handle->dataBandsCount)];
+    GByte* data = (GByte*)CPLCalloc(w.xsize * w.ysize * handle->dataBandsCount, sizeof(GByte));
+
+    int panBandMap[handle->dataBandsCount];
+    fill_pband_list(handle->dataBandsCount, panBandMap);
+    LOG("panBandMap[%zu] = {%d, %d, %d}", sizeof(panBandMap)/sizeof(int), panBandMap[0], panBandMap[1], panBandMap[2]);
+
+    CPLErrorReset();
+    CPLErr eErr = GDALDatasetRasterIO(ds, GF_Read, 
+                                      r.xoffset, r.yoffset, r.xsize, r.ysize, data, 
+                                      w.xsize, w.ysize, GDT_Byte, handle->dataBandsCount, panBandMap, 
+                                      0, 0, 0);
+    if (eErr == CE_Failure) {
+        LOG("DatasetRasterIO read failed: %s", CPLGetLastErrorMsg());
+    }
+    LOG("ds.ReadRaster");
+
+    //GByte alpha[wxsize * wysize * 1];
+    GByte* alpha = (GByte*)CPLCalloc(w.xsize * w.ysize, sizeof(GByte));
+
+    CPLErrorReset();
+    eErr = GDALRasterIO(handle->alphaBand, GF_Read, 
+                        r.xoffset, r.yoffset, r.xsize, r.ysize, alpha, w.xsize, w.ysize, 
+                        GDT_Byte, 0, 0);
+
+    if (eErr == CE_Failure) {
+        LOG("RasterIO read failed: %s", CPLGetLastErrorMsg());
+    }
+    LOG("self.alphaband.ReadRaster");
+
+    generate_tile(handle, dstile, w, data, alpha, tilefilename, hOutDriver, hMemDriver);
 
     return ATOM_OK;
 }
@@ -679,7 +680,7 @@ static ErlNifFunc nif_funcs[] =
     {"cut_tile", 4, gdal_nif_cut_tile},
     {"get_meta", 1, gdal_nif_get_meta},
 
-    {"close", 1, gdal_nif_close}
+    {"close_ref", 1, gdal_nif_close}
 };
 
 static void gdal_nifs_resource_cleanup(ErlNifEnv* env, void* arg)

@@ -46,8 +46,12 @@ open(Filename) ->
             Err
     end.
 
--spec close(reference()) -> ok.
-close(_Ref) ->
+-spec close(imghandler()) -> ok.
+close({Ref, _DI, _SI} = _ImgHandler) ->
+    close_ref(Ref).
+
+-spec close_ref(reference()) -> ok.
+close_ref(_Ref) ->
     case random:uniform(999999999999) of
         666 -> ok;
         667 -> exit("NIF library not loaded")
