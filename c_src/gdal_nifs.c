@@ -373,6 +373,18 @@ static int get_bandregion_from(ErlNifEnv* env, const ERL_NIF_TERM *pterm, bandre
     return res;
 }
 
+static void free_and_close(GDALDatasetH ds, GByte* data, GByte* alpha) 
+{
+    if (ds != NULL) {
+        GDALClose(ds);
+    }
+    if (data != NULL) {
+        CPLFree(data);
+    }
+    if (alpha != NULL) {
+        CPLFree(alpha);
+    }
+}
 static void generate_tile(gdal_dataset_handle* handle, GDALDatasetH dstile, bandregion w, GByte* data, GByte* alpha, const char* tilefilename, 
         GDALDriverH hOutDriver, GDALDatasetH hMemDriver)
 {
@@ -388,6 +400,8 @@ static void generate_tile(gdal_dataset_handle* handle, GDALDatasetH dstile, band
                                    0, 0, 0);
         if (eErr == CE_Failure) {
             LOG("data WriteRaster failed: %s", CPLGetLastErrorMsg());
+            free_and_close(dstile, data, alpha);
+            return;
         }
 
         CPLErrorReset();
@@ -398,6 +412,8 @@ static void generate_tile(gdal_dataset_handle* handle, GDALDatasetH dstile, band
                                    0, 0, 0);
         if (eErr == CE_Failure) {
             LOG("alpha WriteRaster failed: %s", CPLGetLastErrorMsg());
+            free_and_close(dstile, data, alpha);
+            return;
         }
 
         // Note: For source drivers based on WaveLet compression (JPEG2000, ECW, MrSID)
@@ -409,10 +425,15 @@ static void generate_tile(gdal_dataset_handle* handle, GDALDatasetH dstile, band
 
         CPLErrorReset();
         // Big ReadRaster query in memory scaled to the tilesize - all but 'near' algo
+        LOG("create dsquery MEM dataset");
         GDALDatasetH dsquery = GDALCreate(hMemDriver, "", 
                                           handle->querysize, handle->querysize, handle->tilebands, 
                                           GDT_Byte, NULL);
-        LOG("create dsquery MEM dataset");
+        if (eErr == CE_Failure) {
+            LOG("failed to create dsquery MEM dataset");
+            free_and_close(dstile, data, alpha);
+            return;
+        }
 
         CPLErrorReset();
 
@@ -427,6 +448,9 @@ static void generate_tile(gdal_dataset_handle* handle, GDALDatasetH dstile, band
         if (eErr == CE_Failure) {
             LOG("data WriteRaster dsquery failed: %s", CPLGetLastErrorMsg());
             LOG("dsquery.WriteRaster(wx: %d, wy: %d, wxsize: %d, wysize: %d, data: %p, ", w.xoffset, w.yoffset, w.xsize, w.ysize, data);
+            free_and_close(dstile, data, alpha);
+            GDALClose(dsquery);
+            return;
         }
 
         CPLErrorReset();
@@ -438,11 +462,19 @@ static void generate_tile(gdal_dataset_handle* handle, GDALDatasetH dstile, band
                                    0, 0, 0);
         if (eErr == CE_Failure) {
             LOG("alpha WriteRaster dsquery failed: %s", CPLGetLastErrorMsg());
+            free_and_close(dstile, data, alpha);
+            GDALClose(dsquery);
+            return;
         }
 
         scale_query_to_tile(dsquery, dstile, tilefilename, handle->options_resampling);
-
         GDALClose(dsquery);
+
+        if (eErr == CE_Failure) {
+            LOG("scale_query_to_tile failed: %s", CPLGetLastErrorMsg());
+            free_and_close(dstile, data, alpha);
+            return;
+        }
     }
 
     if ( ! handle->options_resampling || (strcmp("antialias", handle->options_resampling) != 0) ) {
@@ -453,14 +485,8 @@ static void generate_tile(gdal_dataset_handle* handle, GDALDatasetH dstile, band
         GDALClose(tileDataset);
     }
 
-    GDALClose(dstile);
-
-    if (data != NULL) {
-        CPLFree(data);
-    }
-    if (alpha != NULL) {
-        CPLFree(alpha);
-    }
+    free_and_close(dstile, data, alpha);
+    return;
 }
 
 static ERL_NIF_TERM gdal_nif_cut_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
@@ -510,7 +536,11 @@ static ERL_NIF_TERM gdal_nif_cut_tile(ErlNifEnv* env, int argc, const ERL_NIF_TE
                                       w.xsize, w.ysize, GDT_Byte, handle->dataBandsCount, panBandMap, 
                                       0, 0, 0);
     if (eErr == CE_Failure) {
-        LOG("DatasetRasterIO read failed: %s", CPLGetLastErrorMsg());
+        free_and_close(dstile, data, NULL);
+
+        char buf[256];
+        sprintf(buf, "DatasetRasterIO read failed: %s", CPLGetLastErrorMsg());
+        return enif_make_tuple2(env, ATOM_ERROR, enif_make_string(env, buf, ERL_NIF_LATIN1));
     }
     LOG("ds.ReadRaster");
 
@@ -523,7 +553,11 @@ static ERL_NIF_TERM gdal_nif_cut_tile(ErlNifEnv* env, int argc, const ERL_NIF_TE
                         GDT_Byte, 0, 0);
 
     if (eErr == CE_Failure) {
-        LOG("RasterIO read failed: %s", CPLGetLastErrorMsg());
+        free_and_close(dstile, data, alpha);
+
+        char buf[256];
+        sprintf(buf, "RasterIO alphaband read failed: %s", CPLGetLastErrorMsg());
+        return enif_make_tuple2(env, ATOM_ERROR, enif_make_string(env, buf, ERL_NIF_LATIN1));
     }
     LOG("self.alphaband.ReadRaster");
 
