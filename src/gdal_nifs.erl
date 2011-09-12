@@ -6,6 +6,7 @@
 -export([get_meta/1]).
 -export([calc_zoomlevel_range/1, 
          clone_tile/4,
+         generate_tile/1,
          calc_swne/1, 
          calc_tminmax/1]).
 -export([generate_base_tiles/1]).
@@ -19,7 +20,7 @@
 % Later on reset according the chosen resampling algorightm
 -type sizeinfo() :: {QuerySize::non_neg_integer(), TileSize::non_neg_integer()}.
 
--type tileinfo() :: {DatasetTile::reference(), Data::reference(), Alpha::reference(), TileFilename::string(), W::bandregion()}.
+% -type tileinfo() :: {DatasetTile::reference(), Data::reference(), Alpha::reference(), TileFilename::string(), W::bandregion()}.
 
 -type imghandler() :: {reference(), datasetinfo(), sizeinfo()}.
 
@@ -91,11 +92,16 @@ generate_tiles_alone_y(Ty, Tminy, Tminx, Tmaxx, Tmaxz, ImgHandler) ->
 generate_tiles_alone_x(_Ty, Tmaxx, Tmaxx, _Tmaxz, _ImgHandler) ->
     ok;
 generate_tiles_alone_x(Ty, Tx, Tmaxx, Tmaxz, ImgHandler) ->
-    {ok, _TileInfo} = clone_tile_for(Ty, Tx, Tmaxz, ImgHandler),
+    {ok, TileInfo} = clone_tile_for(Ty, Tx, Tmaxz, ImgHandler),
+    spawn(fun() ->
+        generate_tile(TileInfo)
+    end)
+,
+
     generate_tiles_alone_x(Ty, Tx + 1, Tmaxx, Tmaxz, ImgHandler).
 
 
--spec clone_tile_for(integer(), integer(), byte(), imghandler()) -> {ok, tileinfo()} | {error, string()}.
+-spec clone_tile_for(integer(), integer(), byte(), imghandler()) -> {ok, reference()} | {error, string()}.
 clone_tile_for(Ty, Tx, Tz, {Ref, DatasetInfo, {QuerySize, _TileSize}} = _ImgHandler) ->
     % Create directories for the tile
     file:make_dir(filename:join([?OUTPUT, integer_to_list(Tz)])),
@@ -187,11 +193,18 @@ calc_data_bandscount(_Ref) ->
         _   -> exit("NIF library not loaded")
     end.
 
--spec clone_tile(reference(), bandregion(), bandregion(), string()) -> {ok, tileinfo()} | {error, string()}.
+-spec clone_tile(reference(), bandregion(), bandregion(), string()) -> {ok, reference()} | {error, string()}.
 clone_tile(_Ref, _R, _W, _FileName) ->
     case random:uniform(999999999999) of
-        666 -> {ok, {make_ref(), make_ref(), make_ref(), make_bogus_string(), make_bogus_bandregion()}};
+        666 -> {ok, make_ref()};
         999 -> {error, make_bogus_string()};
+        _   -> exit("NIF library not loaded")
+    end.
+
+-spec generate_tile(TileInfo::reference()) -> ok.
+generate_tile(_TileInfo) ->
+    case random:uniform(999999999999) of
+        666 -> ok;
         _   -> exit("NIF library not loaded")
     end.
 
