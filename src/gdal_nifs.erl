@@ -2,22 +2,24 @@
 
 -export([init/0]).
 -export([open/1,
+        generate_base_tiles/1,
         close/1]).
+
 -export([get_meta/1]).
+
 -export([calc_zoomlevel_range/1, 
          clone_tile/4,
          generate_tile/1,
          calc_swne/1, 
          calc_tminmax/1]).
--export([generate_base_tiles/1]).
 
 -include("gdal2tiles.hrl").
 
 -define(OUTPUT, "/tmp").
 -define(TILE_EXT, "png").
 
-% QuerySize: How big should be query window be for scaling down
-% Later on reset according the chosen resampling algorightm
+%% QuerySize: How big should be query window be for scaling down
+%% Later on reset according the chosen resampling algorightm
 -type sizeinfo() :: {QuerySize::non_neg_integer(), TileSize::non_neg_integer()}.
 
 % -type tileinfo() :: {DatasetTile::reference(), Data::reference(), Alpha::reference(), TileFilename::string(), W::bandregion()}.
@@ -37,6 +39,7 @@ init() ->
             end,
     erlang:load_nif(filename:join(PrivDir, atom_to_list(?MODULE)), 0).
 
+
 -spec(open(Filename::string()) -> {ok, imghandler()} | {error, string()}).
 open(Filename) ->
     case open_img(Filename) of
@@ -50,9 +53,11 @@ open(Filename) ->
             Err
     end.
 
+
 -spec close(imghandler()) -> ok.
 close({Ref, _DI, _SI} = _ImgHandler) ->
     close_ref(Ref).
+
 
 -spec close_ref(reference()) -> ok.
 close_ref(_Ref) ->
@@ -61,16 +66,18 @@ close_ref(_Ref) ->
         667 -> exit("NIF library not loaded")
     end.
 
+
 get_meta(Ref) ->
     erlang:error(function_clause, ["NIF library not loaded",Ref]).
+
 
 %% @doc Generation of the base tiles (the lowest in the pyramid) directly from the input raster
 -spec generate_base_tiles(imghandler()) -> ok.
 generate_base_tiles({_Ref, DatasetInfo, _SizeInfo} = ImgHandler) ->
-    %    LOG("Generating Base Tiles:");
+    %%  LOG("Generating Base Tiles:");
     {_Tminz, Tmaxz} = calc_zoomlevel_range(ImgHandler),
     Tminmax = calc_tminmax(DatasetInfo),
-    % Set the bounds
+    %% Set the bounds
     {Tminx, Tminy, Tmaxx, Tmaxy} = lists:nth(Tmaxz + 1, Tminmax),
     _TCount = (1 + abs(Tmaxx - Tminx)) * (1 + abs(Tmaxy - Tminy)),
 
@@ -88,6 +95,7 @@ generate_tiles_alone_y(Ty, Tminy, Tminx, Tmaxx, Tmaxz, ImgHandler) ->
     generate_tiles_alone_x(Ty, Tminx, Tmaxx, Tmaxz, ImgHandler),
     generate_tiles_alone_y(Ty - 1, Tminy, Tminx, Tmaxx, Tmaxz, ImgHandler).
 
+
 -spec generate_tiles_alone_x(integer(), integer(), integer(), byte(), imghandler()) -> ok.
 generate_tiles_alone_x(_Ty, Tmaxx, Tmaxx, _Tmaxz, _ImgHandler) ->
     ok;
@@ -96,21 +104,19 @@ generate_tiles_alone_x(Ty, Tx, Tmaxx, Tmaxz, ImgHandler) ->
     spawn(fun() ->
         generate_tile(TileInfo)
     end)
-,
+    ,
 
     generate_tiles_alone_x(Ty, Tx + 1, Tmaxx, Tmaxz, ImgHandler).
 
 
 -spec clone_tile_for(integer(), integer(), byte(), imghandler()) -> {ok, reference()} | {error, string()}.
 clone_tile_for(Ty, Tx, Tz, {Ref, DatasetInfo, {QuerySize, _TileSize}} = _ImgHandler) ->
-    % Create directories for the tile
-    file:make_dir(filename:join([?OUTPUT, integer_to_list(Tz)])),
-    file:make_dir(filename:join([?OUTPUT, integer_to_list(Tz), integer_to_list(Tx)])),
-    
     TileFilename = filename:join([?OUTPUT, integer_to_list(Tz), integer_to_list(Tx), integer_to_list(Ty) ++ "." ++ ?TILE_EXT]),
+    %% Create directories for the tile
+    ok = filelib:ensure_dir(TileFilename),
     io:format("tilefilename: ~p~n", [TileFilename]),
 
-    % Tile bounds in EPSG:900913
+    %% Tile bounds in EPSG:900913
     {MinX, MinY, MaxX, MaxY} = mercator_tiles:tile_enclosure(Tx, Ty, Tz),
     Bound = {MinX, MaxY, MaxX, MinY},
 
@@ -125,6 +131,7 @@ calc_tminmax(DatasetInfo) ->
     Enclosure = get_enclosure(DatasetInfo),
     calc_tminmax(Enclosure, [], 0).
 
+
 calc_tminmax(_Enclosure, Tminmax, 32) ->
     lists:reverse(Tminmax);
 calc_tminmax({Ominx, Ominy, Omaxx, Omaxy} = Enclosure, Tminmax, Zoom) ->
@@ -136,6 +143,7 @@ calc_tminmax({Ominx, Ominy, Omaxx, Omaxy} = Enclosure, Tminmax, Zoom) ->
         min(Z, Tmaxx), min(Z, Tmaxy)
     },
     calc_tminmax(Enclosure, [EnclosureOfZoom|Tminmax], Zoom + 1).
+
 
 -spec get_enclosure(datasetinfo()) -> enclosure().
 get_enclosure(DatasetInfo) ->
@@ -155,14 +163,16 @@ calc_zoomlevel_range({_Ref, DatasetInfo, _SizeInfo}) ->
     Tmaxz = mercator_tiles:zoom_for_pixelsize( PixelSizeX ),
     {Tminz, Tmaxz}.
 
+
 calc_swne(DatasetInfo) ->
     {Ominx, Ominy, Omaxx, Omaxy} = get_enclosure(DatasetInfo),
     {South, West} = mercator_tiles:meters_to_latlon(Ominx, Ominy),
     {North, East} = mercator_tiles:meters_to_latlon(Omaxx, Omaxy),
     {ok, {max(-85.05112878, South), max(-180.0, West), min(85.05112878, North), min(180.0, East)}}.
 
+
 %% ---------------------------------------------------
-%% private nif function
+%% private stub nif functions
 %% ---------------------------------------------------
 
 -spec open_img(string()) -> {ok, reference()} | {error, string()}.
@@ -187,6 +197,7 @@ calc_srs(_Ref) ->
         _   -> exit("NIF library not loaded")
     end.
 
+-spec calc_data_bandscount(reference()) -> non_neg_integer().
 calc_data_bandscount(_Ref) ->
     case random:uniform(999999999999) of
         666 -> make_bogus_non_neg();
@@ -215,6 +226,9 @@ warp_dataset(_Ref) ->
         _   -> exit("NIF library not loaded")
     end.
 
+%% ---------------------------------------------------
+%% mock nif function: just for dialyzer
+%% ---------------------------------------------------
 make_bogus_non_neg() ->
     case random:uniform(999999999999) of
         666 -> 0;
@@ -229,9 +243,6 @@ make_bogus_float() ->
 
 make_bogus_datasetinfo() ->
     {make_bogus_float(), make_bogus_float(), make_bogus_float(), make_bogus_float(), make_bogus_non_neg(), make_bogus_non_neg()}.
-
-make_bogus_bandregion() ->
-    {make_bogus_non_neg(), make_bogus_non_neg(), make_bogus_non_neg(), make_bogus_non_neg()}.
 
 make_bogus_string() ->
     integer_to_list(random:uniform(99999999)).

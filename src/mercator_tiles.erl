@@ -126,6 +126,7 @@ adjust_byedge(R, Rsize, RasterSize, QuerySize) ->
         end,
     {NewR, NewW, ResWsize, ResRsize}.
 
+-spec quadtree(TX::integer(), TY::integer(), Zoom::byte(), Quadtree::string()) -> string().
 quadtree(_TX, _TY, 0, Quadtree) -> 
     Quadtree;
 quadtree(TX, TY, Zoom, Quadtree) -> 
@@ -133,6 +134,7 @@ quadtree(TX, TY, Zoom, Quadtree) ->
     Digit = bit_op(TX, TY, Mask),
     quadtree(TX, TY, Zoom - 1, Quadtree ++ integer_to_list(Digit)).
 
+-spec bit_op(TX::integer(), TY::integer(), Mask::byte()) -> 0 | 1 | 2 | 3.
 bit_op(TX, TY, Mask) ->
     R1 = 
     if
@@ -150,6 +152,7 @@ bit_op(TX, TY, Mask) ->
     end,
     R1 + R2.
 
+-spec zoom_for_pixelsize(PixelSize::float(), I::byte()) -> byte().
 zoom_for_pixelsize(PixelSize, I) ->
     R = resolution(I),
     if 
@@ -170,6 +173,7 @@ cfi(I) ->
 
 
 %% @doc Converts EPSG:900913 to pyramid pixel coordinates in given zoom level
+-spec meters_to_pixels(float(), float(), byte()) -> {float(), float()}.
 meters_to_pixels(MX, MY, Zoom) ->
     Resolution = resolution(Zoom),
     PX = (MX + ?ORIGIN_SHIFT) / Resolution,
@@ -177,6 +181,7 @@ meters_to_pixels(MX, MY, Zoom) ->
     {PX, PY}.
 
 %% @doc Returns a tile covering region in given pixel coordinates
+-spec pixels_to_tile(float(), float()) -> {integer(), integer()}.
 pixels_to_tile(PX, PY) ->
     TX = math_utils:ceiling( PX / ?TILE_SIZE ) - 1,
     TY = math_utils:ceiling( PY / ?TILE_SIZE ) - 1,
