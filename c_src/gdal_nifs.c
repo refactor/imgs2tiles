@@ -554,7 +554,7 @@ static ERL_NIF_TERM gdal_nif_generate_tile(ErlNifEnv* env, int argc, const ERL_N
     return ATOM_OK;
 }
 
-static ERL_NIF_TERM gdal_nif_clone_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM gdal_nif_copyout_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     LOG("is calling, arity = %d", argc);
 
@@ -792,7 +792,7 @@ static ErlNifFunc nif_funcs[] =
     {"calc_srs", 1, gdal_nif_calc_srs},
     {"warp_dataset", 1, gdal_nif_warp_dataset},
     {"calc_data_bandscount", 1, gdal_nif_calc_data_bandscount},
-    {"clone_tile", 4, gdal_nif_clone_tile},
+    {"copyout_tile", 4, gdal_nif_copyout_tile},
     {"generate_tile", 1, gdal_nif_generate_tile},
     {"get_meta", 1, gdal_nif_get_meta},
 

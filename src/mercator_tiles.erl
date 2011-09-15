@@ -186,8 +186,8 @@ quadtree(TX, TY, Zoom) ->
 %% @doc For given dataset and query in cartographic coordinates returns parameters for ReadRaster() in raster coordinates and
 %% x/y shifts (for border tiles). If the querysize is not given, the extent is returned in the native resolution of dataset ds.
 %% {LeftTopX, LeftTopY, RightBottomX, RightBottomY} = _Bound
--spec geo_query(datasetinfo(), bound(), non_neg_integer()) -> {bandregion(), bandregion()}.
-geo_query({OriginX, OriginY, PixelSizeX, PixelSizeY, RasterXSize, RasterYSize} =_DatasetInfo, {Ulx, Uly, Lrx, Lry} = _Bound, QuerySize) ->
+-spec geo_query(rasterinfo(), bound(), non_neg_integer()) -> {bandregion(), bandregion()}.
+geo_query({OriginX, OriginY, PixelSizeX, PixelSizeY, RasterXSize, RasterYSize} =_RasterInfo, {Ulx, Uly, Lrx, Lry} = _Bound, QuerySize) ->
     Rx = trunc( (Ulx - OriginX) / PixelSizeX + 0.001 ),
     Ry = trunc( (Uly - OriginY) / PixelSizeY + 0.001 ),
     Rxsize = trunc( (Lrx - Ulx) / PixelSizeX + 0.5 ),
@@ -199,7 +199,7 @@ geo_query({OriginX, OriginY, PixelSizeX, PixelSizeY, RasterXSize, RasterYSize} =
     {{NewRx, NewRy, ResRxsize, ResRysize}, {NewWx, NewWy, ResWxsize, ResWysize}}.
 
 %% ===================================================================
-%% private funcs
+%% private functions
 %% ===================================================================
 
 %% @doc Coordinates should not go out of the bounds of the raster

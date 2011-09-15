@@ -4,7 +4,7 @@
 -type enclosure() :: {MinX::float(), MinY::float(), MaxX::float(), MaxY::float()}.
 
 %% {OriginX, OriginY, PixelSizeX, PixelSizeY, RasterXSize, RasterYSize},
--type datasetinfo() :: {float(), float(), float(), float(), non_neg_integer(), non_neg_integer()}.
+-type rasterinfo() :: {float(), float(), float(), float(), non_neg_integer(), non_neg_integer()}.
 
 %% XOffset: the pixel offset to the top left corner of the region of the band to be accessed
 %% YOffset: The line offset to the top left corner of the region of the band to be accessed. 

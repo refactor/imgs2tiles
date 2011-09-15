@@ -38,7 +38,7 @@
 -export([get_meta/1]).
 
 -export([calc_zoomlevel_range/1, 
-         clone_tile/4,
+         copyout_tile/4,
          generate_tile/1,
          calc_swne/1, 
          calc_tminmax/1]).
@@ -52,9 +52,10 @@
 %% Later on reset according the chosen resampling algorightm
 -type sizeinfo() :: {QuerySize::non_neg_integer(), TileSize::non_neg_integer()}.
 
-% -type tileinfo() :: {DatasetTile::reference(), Data::reference(), Alpha::reference(), TileFilename::string(), W::bandregion()}.
+-type tileinfo() :: reference().
+ %{DatasetTile::reference(), Data::reference(), Alpha::reference(), TileFilename::string(), W::bandregion()}.
 
--type imghandler() :: {reference(), datasetinfo(), sizeinfo()}.
+-type imghandler() :: {reference(), rasterinfo(), sizeinfo()}.
 
 -on_load(init/0).
 
@@ -76,9 +77,9 @@ open(Filename) ->
         {ok, Hdataset} = _Res->
             calc_nodatavalue(Hdataset),
             calc_srs(Hdataset),
-            {ok, DatasetInfo} = warp_dataset(Hdataset),
+            {ok, RasterInfo} = warp_dataset(Hdataset),
             _DataBandsCount = calc_data_bandscount(Hdataset),
-            {ok, {Hdataset, DatasetInfo, {4 * ?TILE_SIZE, ?TILE_SIZE}}};
+            {ok, {Hdataset, RasterInfo, {4 * ?TILE_SIZE, ?TILE_SIZE}}};
         {error, _} = Err ->
             Err
     end.
@@ -103,10 +104,10 @@ get_meta(Ref) ->
 
 %% @doc Generation of the base tiles (the lowest in the pyramid) directly from the input raster
 -spec generate_base_tiles(imghandler()) -> ok.
-generate_base_tiles({_Ref, DatasetInfo, _SizeInfo} = ImgHandler) ->
+generate_base_tiles({_Ref, RasterInfo, _SizeInfo} = ImgHandler) ->
     %%  LOG("Generating Base Tiles:");
     {_Tminz, Tmaxz} = calc_zoomlevel_range(ImgHandler),
-    Tminmax = calc_tminmax(DatasetInfo),
+    Tminmax = calc_tminmax(RasterInfo),
     %% Set the bounds
     {Tminx, Tminy, Tmaxx, Tmaxy} = lists:nth(Tmaxz + 1, Tminmax),
     _TCount = (1 + abs(Tmaxx - Tminx)) * (1 + abs(Tmaxy - Tminy)),
@@ -130,7 +131,7 @@ generate_tiles_alone_y(Ty, Tminy, Tminx, Tmaxx, Tmaxz, ImgHandler) ->
 generate_tiles_alone_x(_Ty, Tmaxx, Tmaxx, _Tmaxz, _ImgHandler) ->
     ok;
 generate_tiles_alone_x(Ty, Tx, Tmaxx, Tmaxz, ImgHandler) ->
-    {ok, TileInfo} = clone_tile_for(Ty, Tx, Tmaxz, ImgHandler),
+    {ok, TileInfo} = copyout_tile_for(Ty, Tx, Tmaxz, ImgHandler),
     spawn(fun() ->
         generate_tile(TileInfo)
     end)
@@ -139,8 +140,8 @@ generate_tiles_alone_x(Ty, Tx, Tmaxx, Tmaxz, ImgHandler) ->
     generate_tiles_alone_x(Ty, Tx + 1, Tmaxx, Tmaxz, ImgHandler).
 
 
--spec clone_tile_for(integer(), integer(), byte(), imghandler()) -> {ok, reference()} | {error, string()}.
-clone_tile_for(Ty, Tx, Tz, {Ref, DatasetInfo, {QuerySize, _TileSize}} = _ImgHandler) ->
+-spec copyout_tile_for(integer(), integer(), byte(), imghandler()) -> {ok, tileinfo()} | {error, string()}.
+copyout_tile_for(Ty, Tx, Tz, {Ref, RasterInfo, {QuerySize, _TileSize}} = _ImgHandler) ->
     TileFilename = filename:join([?OUTPUT, integer_to_list(Tz), integer_to_list(Tx), integer_to_list(Ty) ++ "." ++ ?TILE_EXT]),
     %% Create directories for the tile
     ok = filelib:ensure_dir(TileFilename),
@@ -150,15 +151,15 @@ clone_tile_for(Ty, Tx, Tz, {Ref, DatasetInfo, {QuerySize, _TileSize}} = _ImgHand
     {MinX, MinY, MaxX, MaxY} = mercator_tiles:tile_enclosure(Tx, Ty, Tz),
     Bound = {MinX, MaxY, MaxX, MinY},
 
-    {Rb, Wb} = mercator_tiles:geo_query(DatasetInfo, Bound, QuerySize),
+    {Rb, Wb} = mercator_tiles:geo_query(RasterInfo, Bound, QuerySize),
 
     io:format("ReadRaster Extend: ~p ~p~n", [Rb, Wb]),
     
-    clone_tile(Ref, Rb, Wb, TileFilename).
+    copyout_tile(Ref, Rb, Wb, TileFilename).
 
 
-calc_tminmax(DatasetInfo) ->
-    Enclosure = get_enclosure(DatasetInfo),
+calc_tminmax(RasterInfo) ->
+    Enclosure = get_enclosure(RasterInfo),
     calc_tminmax(Enclosure, [], 0).
 
 
@@ -175,9 +176,9 @@ calc_tminmax({Ominx, Ominy, Omaxx, Omaxy} = Enclosure, Tminmax, Zoom) ->
     calc_tminmax(Enclosure, [EnclosureOfZoom|Tminmax], Zoom + 1).
 
 
--spec get_enclosure(datasetinfo()) -> enclosure().
-get_enclosure(DatasetInfo) ->
-    {OriginX, OriginY, PixelSizeX, PixelSizeY, RasterXSize, RasterYSize} = DatasetInfo,
+-spec get_enclosure(rasterinfo()) -> enclosure().
+get_enclosure(RasterInfo) ->
+    {OriginX, OriginY, PixelSizeX, PixelSizeY, RasterXSize, RasterYSize} = RasterInfo,
     ExtX = OriginX + PixelSizeX * RasterXSize,
     ExtY = OriginY + PixelSizeY * RasterYSize,
     {min(OriginX, ExtX), min(OriginY, ExtY), max(OriginX, ExtX), max(OriginY, ExtY)}.
@@ -187,15 +188,16 @@ get_enclosure(DatasetInfo) ->
 %% minimal zoom level: map covers area equivalent to one tile
 %% maximal zoom level: closest possible zoom level up on the resolution of raster
 -spec calc_zoomlevel_range(imghandler()) -> {byte(), byte()}.
-calc_zoomlevel_range({_Ref, DatasetInfo, _SizeInfo}) ->
-    {_OriginX, _OriginY, PixelSizeX, _PixelSizeY, RasterXSize, RasterYSize} = DatasetInfo,
+calc_zoomlevel_range({_Ref, RasterInfo, _SizeInfo}) ->
+    {_OriginX, _OriginY, PixelSizeX, _PixelSizeY, RasterXSize, RasterYSize} = RasterInfo,
     Tminz = mercator_tiles:zoom_for_pixelsize( PixelSizeX * max( RasterXSize, RasterYSize) / ?TILE_SIZE ),
     Tmaxz = mercator_tiles:zoom_for_pixelsize( PixelSizeX ),
     {Tminz, Tmaxz}.
 
 
-calc_swne(DatasetInfo) ->
-    {Ominx, Ominy, Omaxx, Omaxy} = get_enclosure(DatasetInfo),
+-spec calc_swne(RasterInfo::rasterinfo()) -> {ok, {float(), float(), float(), float()}}.
+calc_swne(RasterInfo) ->
+    {Ominx, Ominy, Omaxx, Omaxy} = get_enclosure(RasterInfo),
     {South, West} = mercator_tiles:meters_to_latlon(Ominx, Ominy),
     {North, East} = mercator_tiles:meters_to_latlon(Omaxx, Omaxy),
     {ok, {max(-85.05112878, South), max(-180.0, West), min(85.05112878, North), min(180.0, East)}}.
@@ -234,25 +236,25 @@ calc_data_bandscount(_Ref) ->
         _   -> exit("NIF library not loaded")
     end.
 
--spec clone_tile(reference(), bandregion(), bandregion(), string()) -> {ok, reference()} | {error, string()}.
-clone_tile(_Ref, _R, _W, _FileName) ->
+-spec copyout_tile(reference(), bandregion(), bandregion(), string()) -> {ok, reference()} | {error, string()}.
+copyout_tile(_Ref, _R, _W, _FileName) ->
     case random:uniform(999999999999) of
         666 -> {ok, make_ref()};
         999 -> {error, make_bogus_string()};
         _   -> exit("NIF library not loaded")
     end.
 
--spec generate_tile(TileInfo::reference()) -> ok.
+-spec generate_tile(TileInfo::tileinfo()) -> ok.
 generate_tile(_TileInfo) ->
     case random:uniform(999999999999) of
         666 -> ok;
         _   -> exit("NIF library not loaded")
     end.
 
--spec warp_dataset(reference()) -> {ok, datasetinfo()}.
+-spec warp_dataset(reference()) -> {ok, rasterinfo()}.
 warp_dataset(_Ref) ->
     case random:uniform(999999999999) of
-        666 -> {ok, make_bogus_datasetinfo()};
+        666 -> {ok, make_bogus_rasterinfo()};
         _   -> exit("NIF library not loaded")
     end.
 
@@ -271,7 +273,7 @@ make_bogus_float() ->
         _   -> float(random:uniform(4242))
     end.
 
-make_bogus_datasetinfo() ->
+make_bogus_rasterinfo() ->
     {make_bogus_float(), make_bogus_float(), make_bogus_float(), make_bogus_float(), make_bogus_non_neg(), make_bogus_non_neg()}.
 
 make_bogus_string() ->
