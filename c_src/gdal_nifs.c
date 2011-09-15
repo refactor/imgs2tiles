@@ -1,5 +1,5 @@
 // -------------------------------------------------------------------
-// Purpose:  Convert a raster into TMS (Tile Map Service) tiles in a directory or something else.
+// Purpose:  Convert a raster into TMS (Tile Map Service) tiles in a directory or something else as fast as possible.
 //           - support of global tiles (Spherical Mercator) for compatibility
 //               with interactive web maps such as Google Maps
 // 
