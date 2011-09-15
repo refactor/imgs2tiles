@@ -133,7 +133,8 @@ generate_tiles_alone_x(_Ty, Tmaxx, Tmaxx, _Tmaxz, _ImgHandler) ->
 generate_tiles_alone_x(Ty, Tx, Tmaxx, Tmaxz, ImgHandler) ->
     {ok, TileInfo} = copyout_tile_for(Ty, Tx, Tmaxz, ImgHandler),
     spawn(fun() ->
-        generate_tile(TileInfo)
+        generate_tile(TileInfo),
+        save_tile(TileInfo)
     end)
     ,
 
@@ -246,6 +247,13 @@ copyout_tile(_Ref, _R, _W, _FileName) ->
 
 -spec generate_tile(TileInfo::tileinfo()) -> ok.
 generate_tile(_TileInfo) ->
+    case random:uniform(999999999999) of
+        666 -> ok;
+        _   -> exit("NIF library not loaded")
+    end.
+
+-spec save_tile(TileInfo::tileinfo()) -> ok.
+save_tile(_TileInfo) ->
     case random:uniform(999999999999) of
         666 -> ok;
         _   -> exit("NIF library not loaded")

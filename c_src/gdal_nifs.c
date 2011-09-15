@@ -148,7 +148,7 @@ static ERL_NIF_TERM gdal_nif_open_img(ErlNifEnv* env, int argc, const ERL_NIF_TE
                     "From paletted file you can create RGBA file (temp.vrt) by:\n"
                     "gdal_translate -of vrt -expand rgba %s temp.vrt\n"
                     "then run this program: gdal2tiles temp.vrt"
-                    ;
+                ;
                 char errstr[name_sz + strlen(msg) + 1];
                 sprintf(errstr, msg, name);
                 
@@ -166,7 +166,8 @@ static ERL_NIF_TERM gdal_nif_open_img(ErlNifEnv* env, int argc, const ERL_NIF_TE
                 return enif_make_tuple2(env, 
                                         ATOM_ERROR,
                                         enif_make_string(env, 
-                                            "There is no georeference - neither affine transformation (worldfile) nor GCPs",
+                                            "There is no georeference - "
+                                            "neither affine transformation (worldfile) nor GCPs",
                                             ERL_NIF_LATIN1));
             }
 
@@ -243,7 +244,9 @@ static ERL_NIF_TERM gdal_nif_warp_dataset(ErlNifEnv* env, int argc, const ERL_NI
             return enif_make_tuple2(env, 
                                     ATOM_ERROR,
                                     enif_make_string(env, 
-                                        "Georeference of the raster contains rotation or skew. Such raster is not supported. Please use gdalwarp first",
+                                        "Georeference of the raster contains rotation or skew. "
+                                        "Such raster is not supported. "
+                                        "Please use gdalwarp first",
                                         ERL_NIF_LATIN1));
         }
 
@@ -415,13 +418,8 @@ static int get_bandregion_from(ErlNifEnv* env, const ERL_NIF_TERM *pterm, bandre
     return res;
 }
 
-static void free_and_close(tileinfo_handle* ti) 
+static void free_temp_data(tileinfo_handle* ti)
 {
-    LOG("free and close");
-    if (ti && ti->dstile != NULL) {
-        GDALClose(ti->dstile);
-        ti->dstile = NULL;
-    }
     if (ti && ti->data != NULL) {
         CPLFree(ti->data);
         ti->data = NULL;
@@ -430,6 +428,18 @@ static void free_and_close(tileinfo_handle* ti)
         CPLFree(ti->alpha);
         ti->alpha = NULL;
     }
+}
+
+static void free_and_close(tileinfo_handle* ti) 
+{
+    LOG("free and close");
+    if (ti && ti->dstile != NULL) {
+        GDALClose(ti->dstile);
+        ti->dstile = NULL;
+    }
+    
+    free_temp_data(ti);
+
     if (ti && ti->tilefilename != NULL) {
         free(ti->tilefilename);
         ti->tilefilename = NULL;
@@ -444,7 +454,6 @@ static ERL_NIF_TERM gdal_nif_generate_tile(ErlNifEnv* env, int argc, const ERL_N
     }
     
     gdal_priv_data* priv_data = (gdal_priv_data*) enif_priv_data(env);   
-    GDALDriverH  hOutDriver = priv_data->hOutDriver;
     GDALDriverH  hMemDriver = priv_data->hMemDriver;
 
     GDALDatasetH dstile = ti->dstile;
@@ -542,15 +551,30 @@ static ERL_NIF_TERM gdal_nif_generate_tile(ErlNifEnv* env, int argc, const ERL_N
         }
     }
 
+    free_temp_data(ti);
+
+    return ATOM_OK;
+}
+
+static ERL_NIF_TERM gdal_nif_save_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    LOG("Write a copy of tile to png/jpg");
+
+    tileinfo_handle* ti;
+    if (!enif_get_resource(env, argv[0], gdal_tileinfo_RESOURCE, (void**)&ti)) {
+        return enif_make_badarg(env);
+    }
+    
+    gdal_priv_data* priv_data = (gdal_priv_data*) enif_priv_data(env);   
+    GDALDriverH  hOutDriver = priv_data->hOutDriver;
+
     if ( ! ti->options_resampling || (strcmp("antialias", ti->options_resampling) != 0) ) {
-        LOG("Write a copy of tile to png/jpg");
         GDALDatasetH tileDataset = GDALCreateCopy(hOutDriver,
-                                                  tilefilename, dstile, 
+                                                  ti->tilefilename, ti->dstile, 
                                                   FALSE, NULL, NULL, NULL);
         GDALClose(tileDataset);
     }
 
-//    free_and_close(ti);
     return ATOM_OK;
 }
 
@@ -794,6 +818,7 @@ static ErlNifFunc nif_funcs[] =
     {"calc_data_bandscount", 1, gdal_nif_calc_data_bandscount},
     {"copyout_tile", 4, gdal_nif_copyout_tile},
     {"generate_tile", 1, gdal_nif_generate_tile},
+    {"save_tile", 1, gdal_nif_save_tile},
     {"get_meta", 1, gdal_nif_get_meta},
 
     {"close_ref", 1, gdal_nif_close}
