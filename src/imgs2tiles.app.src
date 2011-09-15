@@ -1,4 +1,4 @@
-{application, gdal2tiles,
+{application, imgs2tiles,
  [
   {description, ""},
   {vsn, "1"},
@@ -7,6 +7,6 @@
                   kernel,
                   stdlib
                  ]},
-  {mod, { gdal2tiles_app, []}},
+  {mod, { imgs2tiles_app, []}},
   {env, []}
  ]}.

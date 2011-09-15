@@ -28,30 +28,19 @@
 %%   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 %%   DEALINGS IN THE SOFTWARE.
 %% -------------------------------------------------------------------
--module(gdal2tiles_sup).
+-module(imgs2tiles_app).
 
--behaviour(supervisor).
+-behaviour(application).
 
-%% API
--export([start_link/0]).
-
-%% Supervisor callbacks
--export([init/1]).
-
-%% Helper macro for declaring children of supervisor
--define(CHILD(I, Type), {I, {I, start_link, []}, permanent, 5000, Type, [I]}).
+%% Application callbacks
+-export([start/2, stop/1]).
 
 %% ===================================================================
-%% API functions
+%% Application callbacks
 %% ===================================================================
 
-start_link() ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+start(_StartType, _StartArgs) ->
+    imgs2tiles_sup:start_link().
 
-%% ===================================================================
-%% Supervisor callbacks
-%% ===================================================================
-
-init([]) ->
-    {ok, { {one_for_one, 5, 10}, []} }.
-
+stop(_State) ->
+    ok.
