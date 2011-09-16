@@ -1,6 +1,6 @@
-img2tiles use erlang to parallel gdal2tiles process.
+imgs2tiles use erlang to parallel gdal2tiles process.
 
-img2tiles requires:
+imgs2tiles requires:
     1. gdal 1.8 or later;
     2. Erlang R13B04 or later;
     3. rebar as build tool.

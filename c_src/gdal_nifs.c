@@ -44,8 +44,8 @@
 
 #include "nif_logger.h"
 
-static ErlNifResourceType* gdal_datasets_RESOURCE;
-static ErlNifResourceType* gdal_tileinfo_RESOURCE;
+static ErlNifResourceType* gdal_img_RESOURCE;
+static ErlNifResourceType* gdal_tile_RESOURCE;
 
 typedef struct
 {
@@ -56,8 +56,8 @@ typedef struct
 typedef struct
 {
     GDALDatasetH in_ds;     // the original dataset
-
     GDALDatasetH out_ds;    // the VRT dataset which warped in_ds for tile projection
+
     GDALRasterBandH alphaBand;
     int querysize, tilesize, dataBandsCount, tilebands;
 
@@ -70,7 +70,7 @@ typedef struct
 
     OGRSpatialReferenceH out_srs;
     const char* out_srs_wkt;
-} gdal_dataset_handle;
+} gdal_img_handle;
 
 typedef struct
 {
@@ -96,7 +96,7 @@ typedef struct
     bandregion w;
     int querysize, tilesize, dataBandsCount, tilebands;
     const char* options_resampling;
-} tileinfo_handle;
+} gdal_tile_handle;
 
 // Atoms (initialized in on_load)
 static ERL_NIF_TERM ATOM_ALLOCATION_ERROR;
@@ -107,9 +107,10 @@ static ERL_NIF_TERM ATOM_FALSE;
 static ERL_NIF_TERM ATOM_TRUE;
 static ERL_NIF_TERM ATOM_OK;
 
-static void destroy_handle(gdal_dataset_handle* handle);
+static void destroy_img_handle(gdal_img_handle* handle);
+static void gdal_nifs_img_resource_cleanup(ErlNifEnv* env, void* arg);
 
-static ERL_NIF_TERM gdal_nif_open_img(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM gdal_nifs_open_img(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     char name[4096];
     size_t name_sz;
@@ -118,9 +119,9 @@ static ERL_NIF_TERM gdal_nif_open_img(ErlNifEnv* env, int argc, const ERL_NIF_TE
 
         GDALDatasetH in_ds = GDALOpen(name, GA_ReadOnly);
         if (in_ds != NULL) {
-            gdal_dataset_handle* handle = enif_alloc_resource(
-                                                    gdal_datasets_RESOURCE, 
-                                                    sizeof(gdal_dataset_handle));
+            gdal_img_handle* handle = enif_alloc_resource(
+                                                    gdal_img_RESOURCE, 
+                                                    sizeof(gdal_img_handle));
             memset(handle, '\0', sizeof(*handle));
             handle->options_resampling = "average";
             handle->querysize = 256 * 4;
@@ -130,7 +131,7 @@ static ERL_NIF_TERM gdal_nif_open_img(ErlNifEnv* env, int argc, const ERL_NIF_TE
 
             int rasterCount = GDALGetRasterCount(in_ds);
             if (rasterCount == 0) {
-                destroy_handle(handle);
+                destroy_img_handle(handle);
 
                 const char* msg = "Input file '%s' has no raster band";
                 char errstr[name_sz + strlen(msg) + 1];
@@ -142,7 +143,7 @@ static ERL_NIF_TERM gdal_nif_open_img(ErlNifEnv* env, int argc, const ERL_NIF_TE
 
             GDALRasterBandH hBand = GDALGetRasterBand(in_ds, 1);
             if (GDALGetRasterColorTable(hBand) != NULL) {
-                destroy_handle(handle);
+                destroy_img_handle(handle);
 
                 const char* msg = "Please convert this file to RGB/RGBA and run gdal2tiles on the result.\n" 
                     "From paletted file you can create RGBA file (temp.vrt) by:\n"
@@ -162,7 +163,7 @@ static ERL_NIF_TERM gdal_nif_open_img(ErlNifEnv* env, int argc, const ERL_NIF_TE
             GDALGetGeoTransform(in_ds, padfTransform);
             if (0 == memcmp(padfTransform, errTransform, sizeof(errTransform))
                      && GDALGetGCPCount(in_ds) == 0) {
-                destroy_handle(handle);
+                destroy_img_handle(handle);
                 return enif_make_tuple2(env, 
                                         ATOM_ERROR,
                                         enif_make_string(env, 
@@ -171,10 +172,10 @@ static ERL_NIF_TERM gdal_nif_open_img(ErlNifEnv* env, int argc, const ERL_NIF_TE
                                             ERL_NIF_LATIN1));
             }
 
-            ERL_NIF_TERM result = enif_make_resource(env, handle);
+            ERL_NIF_TERM res = enif_make_resource(env, handle);
             enif_release_resource(handle);
 
-            return enif_make_tuple2(env, ATOM_OK, result);
+            return enif_make_tuple2(env, ATOM_OK, res);
         }
         else {
             const char* msg = "It is not possible to open the input file '%s'.";
@@ -190,11 +191,11 @@ static ERL_NIF_TERM gdal_nif_open_img(ErlNifEnv* env, int argc, const ERL_NIF_TE
     }
 }
 
-static ERL_NIF_TERM gdal_nif_calc_nodatavalue(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM gdal_nifs_calc_nodatavalue(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    LOG("gdal_nif_calc_nodatavalue is calling");
-    gdal_dataset_handle* handle;
-    if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
+    LOG("gdal_nifs_calc_nodatavalue is calling");
+    gdal_img_handle* handle;
+    if (enif_get_resource(env, argv[0], gdal_img_RESOURCE, (void**)&handle)) {
         // Get NODATA value
         double nodata[3];
         int count = 0;
@@ -224,11 +225,11 @@ static ERL_NIF_TERM gdal_nif_calc_nodatavalue(ErlNifEnv* env, int argc, const ER
     }
 }
 
-static ERL_NIF_TERM gdal_nif_warp_dataset(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM gdal_nifs_warp_dataset(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    LOG("gdal_nif_warp_dataset is calling");
-    gdal_dataset_handle* handle;
-    if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
+    LOG("gdal_nifs_warp_dataset is calling");
+    gdal_img_handle* handle;
+    if (enif_get_resource(env, argv[0], gdal_img_RESOURCE, (void**)&handle)) {
         GDALDatasetH out_ds = GDALAutoCreateWarpedVRT(handle->in_ds, 
                                                       handle->in_srs_wkt, 
                                                       handle->out_srs_wkt, 
@@ -240,7 +241,7 @@ static ERL_NIF_TERM gdal_nif_warp_dataset(ErlNifEnv* env, int argc, const ERL_NI
         double padfTransform[6];
         GDALGetGeoTransform(out_ds, padfTransform);
         if (padfTransform[2] != 0.0 && padfTransform[4] != 0.0) {
-            destroy_handle(handle);
+            destroy_img_handle(handle);
             return enif_make_tuple2(env, 
                                     ATOM_ERROR,
                                     enif_make_string(env, 
@@ -266,11 +267,11 @@ static ERL_NIF_TERM gdal_nif_warp_dataset(ErlNifEnv* env, int argc, const ERL_NI
     }
 }
 
-static ERL_NIF_TERM gdal_nif_calc_srs(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM gdal_nifs_calc_srs(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    LOG("gdal_nif_calc_srs is calling");
-    gdal_dataset_handle* handle;
-    if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
+    LOG("gdal_nifs_calc_srs is calling");
+    gdal_img_handle* handle;
+    if (enif_get_resource(env, argv[0], gdal_img_RESOURCE, (void**)&handle)) {
         const char* in_srs_wkt = GDALGetProjectionRef(handle->in_ds);
         if (in_srs_wkt == NULL && GDALGetGCPCount(handle->in_ds) != 0) {
             in_srs_wkt = GDALGetGCPProjection(handle->in_ds);
@@ -298,12 +299,12 @@ static ERL_NIF_TERM gdal_nif_calc_srs(ErlNifEnv* env, int argc, const ERL_NIF_TE
     }
 }
 
-static ERL_NIF_TERM gdal_nif_calc_data_bandscount(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) 
+static ERL_NIF_TERM gdal_nifs_calc_data_bandscount(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) 
 {
     LOG(" is calling");
-    gdal_dataset_handle* handle;
+    gdal_img_handle* handle;
 
-    if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
+    if (enif_get_resource(env, argv[0], gdal_img_RESOURCE, (void**)&handle)) {
         unsigned int dataBandsCount;
         handle->alphaBand = GDALGetMaskBand(GDALGetRasterBand(handle->out_ds, 1));
         int rasterCount = GDALGetRasterCount(handle->out_ds);
@@ -352,7 +353,8 @@ static GDALResampleAlg parse_resampling(const char* option_resampling)
     }
 }
 
-static CPLErr scale_query_to_tile(GDALDatasetH dsquery, GDALDatasetH dstile, const char* tilefilename, const char* options_resampling)
+static CPLErr scale_query_to_tile(GDALDatasetH dsquery, GDALDatasetH dstile, 
+                        const char* const tilefilename, const char* options_resampling)
 {
     LOG("Scales down query dataset to the tile dataset");
 
@@ -382,11 +384,16 @@ static CPLErr scale_query_to_tile(GDALDatasetH dsquery, GDALDatasetH dstile, con
     else {
         LOG("other sampling algorithms");
         // Other algorithms are implemented by gdal.ReprojectImage().
-        GDALSetGeoTransform(dsquery, (double []){0.0, tilesize / ((double)querysize), 0.0, 0.0, 0.0, tilesize / ((double)querysize)});
-        GDALSetGeoTransform(dstile, (double []){0.0, 1.0, 0.0, 0.0, 0.0, 1.0});
+        GDALSetGeoTransform(dsquery, 
+                (double []){0.0, tilesize / ((double)querysize), 0.0, 0.0, 0.0, tilesize / ((double)querysize)});
+        GDALSetGeoTransform(dstile, 
+                (double []){0.0, 1.0, 0.0, 0.0, 0.0, 1.0});
 
         CPLErrorReset();
-        CPLErr eErr = GDALReprojectImage(dsquery, NULL, dstile, NULL, parse_resampling(options_resampling), 0.0, 0.0, NULL, NULL, NULL); 
+        CPLErr eErr = GDALReprojectImage(dsquery, NULL, 
+                                         dstile, NULL, 
+                                         parse_resampling(options_resampling), 
+                                         0.0, 0.0, NULL, NULL, NULL); 
         if (eErr != CE_None) {
             LOG("GDALReprojectImage failed on %s, error %s", tilefilename, CPLGetLastErrorMsg());
             return eErr;
@@ -418,7 +425,8 @@ static int get_bandregion_from(ErlNifEnv* env, const ERL_NIF_TERM *pterm, bandre
     return res;
 }
 
-static void free_temp_data(tileinfo_handle* ti)
+// free temp data & alpha binary
+static void free_temp_data(gdal_tile_handle* ti)
 {
     if (ti && ti->data != NULL) {
         CPLFree(ti->data);
@@ -430,9 +438,9 @@ static void free_temp_data(tileinfo_handle* ti)
     }
 }
 
-static void free_and_close(tileinfo_handle* ti) 
+static void free_tile(gdal_tile_handle* ti) 
 {
-    LOG("free and close");
+    LOG("free and close resource");
     if (ti && ti->dstile != NULL) {
         GDALClose(ti->dstile);
         ti->dstile = NULL;
@@ -446,10 +454,10 @@ static void free_and_close(tileinfo_handle* ti)
     }
 }
 
-static ERL_NIF_TERM gdal_nif_generate_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM gdal_nifs_generate_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    tileinfo_handle* ti;
-    if (!enif_get_resource(env, argv[0], gdal_tileinfo_RESOURCE, (void**)&ti)) {
+    gdal_tile_handle* ti;
+    if (!enif_get_resource(env, argv[0], gdal_tile_RESOURCE, (void**)&ti)) {
         return enif_make_badarg(env);
     }
     
@@ -459,7 +467,7 @@ static ERL_NIF_TERM gdal_nif_generate_tile(ErlNifEnv* env, int argc, const ERL_N
     GDALDatasetH dstile = ti->dstile;
     GByte* data = ti->data;
     GByte* alpha = ti->alpha;
-    const char* tilefilename = ti->tilefilename;
+    const char* const tilefilename = ti->tilefilename;
     bandregion w = ti->w;
 
     CPLErr eErr = CE_None;
@@ -474,7 +482,7 @@ static ERL_NIF_TERM gdal_nif_generate_tile(ErlNifEnv* env, int argc, const ERL_N
                                    0, 0, 0);
         if (eErr == CE_Failure) {
             LOG("data WriteRaster failed: %s", CPLGetLastErrorMsg());
-//            free_and_close(ti);
+//            free_tile(ti);
             return enif_make_badarg(env);
         }
 
@@ -486,7 +494,7 @@ static ERL_NIF_TERM gdal_nif_generate_tile(ErlNifEnv* env, int argc, const ERL_N
                                    0, 0, 0);
         if (eErr == CE_Failure) {
             LOG("alpha WriteRaster failed: %s", CPLGetLastErrorMsg());
-//            free_and_close(ti);
+//            free_tile(ti);
             return enif_make_badarg(env);
         }
 
@@ -505,7 +513,7 @@ static ERL_NIF_TERM gdal_nif_generate_tile(ErlNifEnv* env, int argc, const ERL_N
                                           GDT_Byte, NULL);
         if (eErr == CE_Failure) {
             LOG("failed to create dsquery MEM dataset");
-//            free_and_close(ti);
+//            free_tile(ti);
             return enif_make_badarg(env);
         }
 
@@ -520,9 +528,10 @@ static ERL_NIF_TERM gdal_nif_generate_tile(ErlNifEnv* env, int argc, const ERL_N
                                    ti->dataBandsCount, band_list,
                                    0, 0, 0);
         if (eErr == CE_Failure) {
-            LOG("data WriteRaster dsquery failed: %s", CPLGetLastErrorMsg());
-            LOG("dsquery.WriteRaster(wx: %d, wy: %d, wxsize: %d, wysize: %d, data: %p, ", w.xoffset, w.yoffset, w.xsize, w.ysize, data);
-//            free_and_close(ti);
+            LOG("data WriteRaster(wx: %d, wy: %d, wxsize: %d, wysize: %d, data: %p) for dsquery failed: %s", 
+                    w.xoffset, w.yoffset, w.xsize, w.ysize, data,
+                    CPLGetLastErrorMsg());
+//            free_tile(ti);
             GDALClose(dsquery);
             return enif_make_badarg(env);
         }
@@ -536,17 +545,18 @@ static ERL_NIF_TERM gdal_nif_generate_tile(ErlNifEnv* env, int argc, const ERL_N
                                    0, 0, 0);
         if (eErr == CE_Failure) {
             LOG("alpha WriteRaster dsquery failed: %s", CPLGetLastErrorMsg());
-//            free_and_close(ti);
+//            free_tile(ti);
             GDALClose(dsquery);
             return enif_make_badarg(env);
         }
 
-        scale_query_to_tile(dsquery, dstile, tilefilename, ti->options_resampling);
+        CPLErrorReset();
+        eErr = scale_query_to_tile(dsquery, dstile, tilefilename, ti->options_resampling);
         GDALClose(dsquery);
 
         if (eErr == CE_Failure) {
             LOG("scale_query_to_tile failed: %s", CPLGetLastErrorMsg());
-//            free_and_close(ti);
+//            free_tile(ti);
             return enif_make_badarg(env);
         }
     }
@@ -556,12 +566,12 @@ static ERL_NIF_TERM gdal_nif_generate_tile(ErlNifEnv* env, int argc, const ERL_N
     return ATOM_OK;
 }
 
-static ERL_NIF_TERM gdal_nif_save_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM gdal_nifs_save_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     LOG("Write a copy of tile to png/jpg");
 
-    tileinfo_handle* ti;
-    if (!enif_get_resource(env, argv[0], gdal_tileinfo_RESOURCE, (void**)&ti)) {
+    gdal_tile_handle* ti;
+    if (!enif_get_resource(env, argv[0], gdal_tile_RESOURCE, (void**)&ti)) {
         return enif_make_badarg(env);
     }
     
@@ -578,18 +588,16 @@ static ERL_NIF_TERM gdal_nif_save_tile(ErlNifEnv* env, int argc, const ERL_NIF_T
     return ATOM_OK;
 }
 
-static ERL_NIF_TERM gdal_nif_copyout_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM gdal_nifs_copyout_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     LOG("is calling, arity = %d", argc);
-
-    // int querysize = 256 * 4, tilesize = 256, dataBandsCount, tilebands;
 
     gdal_priv_data* priv_data = (gdal_priv_data*) enif_priv_data(env);   
     GDALDriverH  hMemDriver = priv_data->hMemDriver;
 
     GDALDatasetH ds = NULL;
-    gdal_dataset_handle* handle = NULL;
-    if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
+    gdal_img_handle* handle = NULL;
+    if (enif_get_resource(env, argv[0], gdal_img_RESOURCE, (void**)&handle)) {
         ds = handle->out_ds;
     }
     else {
@@ -605,8 +613,8 @@ static ERL_NIF_TERM gdal_nif_copyout_tile(ErlNifEnv* env, int argc, const ERL_NI
     enif_get_string(env, argv[3], tilefilename, 256, ERL_NIF_LATIN1);
     LOG("tilefilename: %s", tilefilename);
 
-    tileinfo_handle* ti = enif_alloc_resource(gdal_tileinfo_RESOURCE, sizeof(*ti));
-    *ti = (tileinfo_handle) {
+    gdal_tile_handle* ti = enif_alloc_resource(gdal_tile_RESOURCE, sizeof(*ti));
+    *ti = (gdal_tile_handle) {
         .dstile = NULL,
         .data = NULL,
         .alpha = NULL,
@@ -619,13 +627,15 @@ static ERL_NIF_TERM gdal_nif_copyout_tile(ErlNifEnv* env, int argc, const ERL_NI
         .options_resampling = handle->options_resampling
     };
 
+    ERL_NIF_TERM res = enif_make_resource(env, ti);
+    enif_release_resource(ti);  // ti resource now only owned by "Erlang"
+
     LOG("Tile dataset in memory");
     CPLErrorReset();
     ti->dstile = GDALCreate(hMemDriver, "",
                             handle->tilesize, handle->tilesize, handle->tilebands, 
                             GDT_Byte, NULL);
 
-    //GByte data[wxsize * wysize * (handle->dataBandsCount)];
     ti->data = (GByte*)CPLCalloc(w.xsize * w.ysize * handle->dataBandsCount, sizeof(GByte));
 
     int panBandMap[handle->dataBandsCount];
@@ -638,7 +648,7 @@ static ERL_NIF_TERM gdal_nif_copyout_tile(ErlNifEnv* env, int argc, const ERL_NI
                                       w.xsize, w.ysize, GDT_Byte, handle->dataBandsCount, panBandMap, 
                                       0, 0, 0);
     if (eErr == CE_Failure) {
-        free_and_close(ti);
+//        free_tile(ti);
 
         char buf[256];
         sprintf(buf, "DatasetRasterIO read failed: %s", CPLGetLastErrorMsg());
@@ -646,7 +656,6 @@ static ERL_NIF_TERM gdal_nif_copyout_tile(ErlNifEnv* env, int argc, const ERL_NI
     }
     LOG("ds.ReadRaster");
 
-    //GByte alpha[wxsize * wysize * 1];
     ti->alpha = (GByte*)CPLCalloc(w.xsize * w.ysize, sizeof(GByte));
 
     CPLErrorReset();
@@ -655,7 +664,7 @@ static ERL_NIF_TERM gdal_nif_copyout_tile(ErlNifEnv* env, int argc, const ERL_NI
                         GDT_Byte, 0, 0);
 
     if (eErr == CE_Failure) {
-        free_and_close(ti);
+//        free_tile(ti);
 
         char buf[256];
         sprintf(buf, "RasterIO alphaband read failed: %s", CPLGetLastErrorMsg());
@@ -665,18 +674,15 @@ static ERL_NIF_TERM gdal_nif_copyout_tile(ErlNifEnv* env, int argc, const ERL_NI
 
     // generate_tile(handle, ti, hOutDriver, hMemDriver);
 
-    ERL_NIF_TERM res = enif_make_resource(env, ti);
-    enif_release_resource(ti);
-
     return enif_make_tuple2(env, ATOM_OK, res);
 }
 
-static ERL_NIF_TERM gdal_nif_get_meta(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM gdal_nifs_get_meta(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    LOG("gdal_nif_get_meta is calling");
-    gdal_dataset_handle* handle;
+    LOG("gdal_nifs_get_meta is calling");
+    gdal_img_handle* handle;
 
-    if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
+    if (enif_get_resource(env, argv[0], gdal_img_RESOURCE, (void**)&handle)) {
         GDALDatasetH in_ds = handle->in_ds;
         if (in_ds != NULL) {
             GDALDriverH hDriver = GDALGetDatasetDriver(in_ds);
@@ -755,13 +761,12 @@ static ERL_NIF_TERM gdal_nif_get_meta(ErlNifEnv* env, int argc, const ERL_NIF_TE
     }
 }
 
-static ERL_NIF_TERM gdal_nif_close(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+static ERL_NIF_TERM gdal_nifs_close_img(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    gdal_dataset_handle* handle = NULL;
-    if (enif_get_resource(env, argv[0], gdal_datasets_RESOURCE, (void**)&handle)) {
-        if (handle != NULL) {
-            destroy_handle(handle);
-        }
+    gdal_img_handle* handle = NULL;
+
+    if (enif_get_resource(env, argv[0], gdal_img_RESOURCE, (void**)&handle)) {
+        gdal_nifs_img_resource_cleanup(env, handle);
         return ATOM_OK;
     }
     else {
@@ -769,8 +774,12 @@ static ERL_NIF_TERM gdal_nif_close(ErlNifEnv* env, int argc, const ERL_NIF_TERM 
     }
 }
 
-static void close_resource(gdal_dataset_handle* handle) {
+static void free_img(gdal_img_handle* handle) {
     LOG("close resource for %p", handle);
+    if (!handle) {
+        return;
+    }
+
     if (handle->in_srs != NULL) {
         LOG("destringing in_srs: %p", handle->in_srs);
         OSRDestroySpatialReference(handle->in_srs);
@@ -804,60 +813,58 @@ static void close_resource(gdal_dataset_handle* handle) {
     LOG("resource closed ");
 }
 
-static void destroy_handle(gdal_dataset_handle* handle) {
-    close_resource(handle);
+static void destroy_img_handle(gdal_img_handle* handle) {
+    free_img(handle);
     enif_release_resource(handle);
 }
 
 static ErlNifFunc nif_funcs[] = 
 {
-    {"open_img", 1, gdal_nif_open_img},
-    {"calc_nodatavalue", 1, gdal_nif_calc_nodatavalue},
-    {"calc_srs", 1, gdal_nif_calc_srs},
-    {"warp_dataset", 1, gdal_nif_warp_dataset},
-    {"calc_data_bandscount", 1, gdal_nif_calc_data_bandscount},
-    {"copyout_tile", 4, gdal_nif_copyout_tile},
-    {"generate_tile", 1, gdal_nif_generate_tile},
-    {"save_tile", 1, gdal_nif_save_tile},
-    {"get_meta", 1, gdal_nif_get_meta},
+    {"open_img", 1, gdal_nifs_open_img},
+    {"calc_nodatavalue", 1, gdal_nifs_calc_nodatavalue},
+    {"calc_srs", 1, gdal_nifs_calc_srs},
+    {"warp_dataset", 1, gdal_nifs_warp_dataset},
+    {"calc_data_bandscount", 1, gdal_nifs_calc_data_bandscount},
+    {"copyout_tile", 4, gdal_nifs_copyout_tile},
+    {"generate_tile", 1, gdal_nifs_generate_tile},
+    {"save_tile", 1, gdal_nifs_save_tile},
+    {"get_meta", 1, gdal_nifs_get_meta},
 
-    {"close_ref", 1, gdal_nif_close}
+    {"close_img", 1, gdal_nifs_close_img}
 };
 
-static void gdal_nifs_resource_cleanup(ErlNifEnv* env, void* arg)
+static void gdal_nifs_img_resource_cleanup(ErlNifEnv* env, void* arg)
 {
     LOG("datasets resource cleaning for %p", arg);
-    gdal_dataset_handle* handle = (gdal_dataset_handle*)arg;
-    close_resource(handle);
-
+    gdal_img_handle* handle = (gdal_img_handle*)arg;
+    free_img(handle);
 }
 
-static void gdal_nifs_tileinfo_resource_cleanup(ErlNifEnv* env, void* arg)
+static void gdal_nifs_tile_resource_cleanup(ErlNifEnv* env, void* arg)
 {
-    LOG("Tileinfo resource cleaning for %p", arg);
-    tileinfo_handle* ti = (tileinfo_handle*)arg;
-    free_and_close(ti);
-
+    LOG("Tile resource cleaning for %p", arg);
+    gdal_tile_handle* ti = (gdal_tile_handle*)arg;
+    free_tile(ti);
 }
 
 static int on_load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info)
 {
     OPEN_LOGER();
 
+    gdal_img_RESOURCE = enif_open_resource_type(env, NULL, "gdal_img_resource",
+                                                &gdal_nifs_img_resource_cleanup,
+                                                ERL_NIF_RT_CREATE | ERL_NIF_RT_TAKEOVER,
+                                                NULL);
+
+    gdal_tile_RESOURCE = enif_open_resource_type(env, NULL, "gdal_tile_resource",
+                                                 &gdal_nifs_tile_resource_cleanup,
+                                                 ERL_NIF_RT_CREATE | ERL_NIF_RT_TAKEOVER,
+                                                 NULL);
+
     // Register all known configured GDAL drivers
     GDALAllRegister();
 
-    gdal_datasets_RESOURCE = enif_open_resource_type(env, NULL, "gdal_datasets_resource",
-                                                     &gdal_nifs_resource_cleanup,
-                                                     ERL_NIF_RT_CREATE | ERL_NIF_RT_TAKEOVER,
-                                                     0);
-
-    gdal_tileinfo_RESOURCE = enif_open_resource_type(env, NULL, "gdal_tileinfo_resource",
-                                                     &gdal_nifs_tileinfo_resource_cleanup,
-                                                     ERL_NIF_RT_CREATE | ERL_NIF_RT_TAKEOVER,
-                                                     0);
-
-    gdal_priv_data* priv = enif_alloc(sizeof(gdal_priv_data));
+    gdal_priv_data* priv = enif_alloc(sizeof(*priv));
     priv->tiledriver = "PNG";
     priv->hOutDriver = GDALGetDriverByName(priv->tiledriver);
     priv->hMemDriver = GDALGetDriverByName("MEM");

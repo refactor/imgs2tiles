@@ -52,10 +52,11 @@
 %% Later on reset according the chosen resampling algorightm
 -type sizeinfo() :: {QuerySize::non_neg_integer(), TileSize::non_neg_integer()}.
 
--type tileinfo() :: reference().
+-type img()  :: reference().
+-type tile() :: reference().
  %{DatasetTile::reference(), Data::reference(), Alpha::reference(), TileFilename::string(), W::bandregion()}.
 
--type imghandler() :: {reference(), rasterinfo(), sizeinfo()}.
+-type imghandler() :: {img(), rasterinfo(), sizeinfo()}.
 
 -on_load(init/0).
 
@@ -87,11 +88,11 @@ open(Filename) ->
 
 -spec close(imghandler()) -> ok.
 close({Ref, _DI, _SI} = _ImgHandler) ->
-    close_ref(Ref).
+    close_img(Ref).
 
 
--spec close_ref(reference()) -> ok.
-close_ref(_Ref) ->
+-spec close_img(reference()) -> ok.
+close_img(_Ref) ->
     case random:uniform(999999999999) of
         666 -> ok;
         667 -> exit("NIF library not loaded")
@@ -141,7 +142,7 @@ generate_tiles_alone_x(Ty, Tx, Tmaxx, Tmaxz, ImgHandler) ->
     generate_tiles_alone_x(Ty, Tx + 1, Tmaxx, Tmaxz, ImgHandler).
 
 
--spec copyout_tile_for(integer(), integer(), byte(), imghandler()) -> {ok, tileinfo()} | {error, string()}.
+-spec copyout_tile_for(integer(), integer(), byte(), imghandler()) -> {ok, tile()} | {error, string()}.
 copyout_tile_for(Ty, Tx, Tz, {Ref, RasterInfo, {QuerySize, _TileSize}} = _ImgHandler) ->
     TileFilename = filename:join([?OUTPUT, integer_to_list(Tz), integer_to_list(Tx), integer_to_list(Ty) ++ "." ++ ?TILE_EXT]),
     %% Create directories for the tile
@@ -208,7 +209,7 @@ calc_swne(RasterInfo) ->
 %% private stub nif functions
 %% ---------------------------------------------------
 
--spec open_img(string()) -> {ok, reference()} | {error, string()}.
+-spec open_img(string()) -> {ok, img()} | {error, string()}.
 open_img(_Filename) ->
     case random:uniform(999999999999) of
         666 -> {ok, make_ref()};
@@ -245,14 +246,14 @@ copyout_tile(_Ref, _R, _W, _FileName) ->
         _   -> exit("NIF library not loaded")
     end.
 
--spec generate_tile(TileInfo::tileinfo()) -> ok.
+-spec generate_tile(TileInfo::tile()) -> ok.
 generate_tile(_TileInfo) ->
     case random:uniform(999999999999) of
         666 -> ok;
         _   -> exit("NIF library not loaded")
     end.
 
--spec save_tile(TileInfo::tileinfo()) -> ok.
+-spec save_tile(TileInfo::tile()) -> ok.
 save_tile(_TileInfo) ->
     case random:uniform(999999999999) of
         666 -> ok;
