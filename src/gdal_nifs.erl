@@ -1,9 +1,12 @@
 %% -------------------------------------------------------------------
-%% Purpose:  Convert a raster into TMS (Tile Map Service) tiles in a directory or something else as fast as possible.
+%% Purpose:  Convert a raster into TMS (Tile Map Service) tiles in a directory or 
+%%              something else as fast as possible.
 %%           - support of global tiles (Spherical Mercator) for compatibility
 %%               with interactive web maps such as Google Maps
 %% 
-%% this is a clone implementent from gdal2tiles.py, but use elang do some parallel work for the speed
+%% this is a clone implementent of gdal2tiles.py, but use elang do some 
+%% parallel work for fast speed 
+%% 
 %% gdal2tiles.py is the work of Klokan Petr Pridal, klokan at klokan dot cz
 %%      Web:      http://www.klokan.cz/projects/gdal2tiles/
 %% 
@@ -39,7 +42,7 @@
 
 -export([calc_zoomlevel_range/1, 
          copyout_tile/4,
-         generate_tile/1,
+         build_tile/1,
          calc_swne/1, 
          calc_tminmax/1]).
 
@@ -54,7 +57,6 @@
 
 -type img()  :: reference().
 -type tile() :: reference().
- %{DatasetTile::reference(), Data::reference(), Alpha::reference(), TileFilename::string(), W::bandregion()}.
 
 -type imghandler() :: {img(), rasterinfo(), sizeinfo()}.
 
@@ -118,7 +120,7 @@ generate_base_tiles({_Ref, RasterInfo, _SizeInfo} = ImgHandler) ->
 
 
 %% ---------------------------------------------------
-%% private function
+%% private functions
 %% ---------------------------------------------------
 -spec generate_tiles_alone_y(integer(), integer(), integer(), integer(), byte(), imghandler()) -> ok.
 generate_tiles_alone_y(Tminy, Tminy, _Tminx, _Tmaxx, _Tmaxz, _ImgHandler) ->
@@ -132,10 +134,10 @@ generate_tiles_alone_y(Ty, Tminy, Tminx, Tmaxx, Tmaxz, ImgHandler) ->
 generate_tiles_alone_x(_Ty, Tmaxx, Tmaxx, _Tmaxz, _ImgHandler) ->
     ok;
 generate_tiles_alone_x(Ty, Tx, Tmaxx, Tmaxz, ImgHandler) ->
-    {ok, TileInfo} = copyout_tile_for(Ty, Tx, Tmaxz, ImgHandler),
+    {ok, Tile} = copyout_tile_for(Ty, Tx, Tmaxz, ImgHandler),
     spawn(fun() ->
-        generate_tile(TileInfo),
-        save_tile(TileInfo)
+        build_tile(Tile),
+        save_tile(Tile)
     end)
     ,
 
@@ -143,8 +145,10 @@ generate_tiles_alone_x(Ty, Tx, Tmaxx, Tmaxz, ImgHandler) ->
 
 
 -spec copyout_tile_for(integer(), integer(), byte(), imghandler()) -> {ok, tile()} | {error, string()}.
-copyout_tile_for(Ty, Tx, Tz, {Ref, RasterInfo, {QuerySize, _TileSize}} = _ImgHandler) ->
-    TileFilename = filename:join([?OUTPUT, integer_to_list(Tz), integer_to_list(Tx), integer_to_list(Ty) ++ "." ++ ?TILE_EXT]),
+copyout_tile_for(Ty, Tx, Tz, {Img, RasterInfo, {QuerySize, _TileSize}} = _ImgHandler) ->
+    TileFilename = filename:join([?OUTPUT, 
+            integer_to_list(Tz), integer_to_list(Tx), 
+            integer_to_list(Ty) ++ "." ++ ?TILE_EXT]),
     %% Create directories for the tile
     ok = filelib:ensure_dir(TileFilename),
     io:format("tilefilename: ~p~n", [TileFilename]),
@@ -157,7 +161,7 @@ copyout_tile_for(Ty, Tx, Tz, {Ref, RasterInfo, {QuerySize, _TileSize}} = _ImgHan
 
     io:format("ReadRaster Extend: ~p ~p~n", [Rb, Wb]),
     
-    copyout_tile(Ref, Rb, Wb, TileFilename).
+    copyout_tile(Img, Rb, Wb, TileFilename).
 
 
 calc_tminmax(RasterInfo) ->
@@ -238,23 +242,23 @@ calc_data_bandscount(_Ref) ->
         _   -> exit("NIF library not loaded")
     end.
 
--spec copyout_tile(reference(), bandregion(), bandregion(), string()) -> {ok, reference()} | {error, string()}.
-copyout_tile(_Ref, _R, _W, _FileName) ->
+-spec copyout_tile(img(), bandregion(), bandregion(), string()) -> {ok, tile()} | {error, string()}.
+copyout_tile(_Img, _R, _W, _FileName) ->
     case random:uniform(999999999999) of
         666 -> {ok, make_ref()};
         999 -> {error, make_bogus_string()};
         _   -> exit("NIF library not loaded")
     end.
 
--spec generate_tile(TileInfo::tile()) -> ok.
-generate_tile(_TileInfo) ->
+-spec build_tile(Tile::tile()) -> ok.
+build_tile(_Tile) ->
     case random:uniform(999999999999) of
         666 -> ok;
         _   -> exit("NIF library not loaded")
     end.
 
--spec save_tile(TileInfo::tile()) -> ok.
-save_tile(_TileInfo) ->
+-spec save_tile(Tile::tile()) -> ok.
+save_tile(_Tile) ->
     case random:uniform(999999999999) of
         666 -> ok;
         _   -> exit("NIF library not loaded")
@@ -268,7 +272,7 @@ warp_dataset(_Ref) ->
     end.
 
 %% ---------------------------------------------------
-%% mock nif function: just for dialyzer
+%% mock nif functions: just for dialyzer
 %% ---------------------------------------------------
 make_bogus_non_neg() ->
     case random:uniform(999999999999) of
@@ -283,7 +287,8 @@ make_bogus_float() ->
     end.
 
 make_bogus_rasterinfo() ->
-    {make_bogus_float(), make_bogus_float(), make_bogus_float(), make_bogus_float(), make_bogus_non_neg(), make_bogus_non_neg()}.
+    {make_bogus_float(), make_bogus_float(), make_bogus_float(), make_bogus_float(),
+        make_bogus_non_neg(), make_bogus_non_neg()}.
 
 make_bogus_string() ->
     integer_to_list(random:uniform(99999999)).
