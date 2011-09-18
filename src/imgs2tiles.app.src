@@ -1,6 +1,6 @@
 {application, imgs2tiles,
  [
-  {description, ""},
+  {description, "Convert rasters(imgs) into TMS (Tile Map Service) tiles"},
   {vsn, "1"},
   {registered, []},
   {applications, [
@@ -8,5 +8,5 @@
                   stdlib
                  ]},
   {mod, { imgs2tiles_app, []}},
-  {env, []}
+  {env, [{default_tiles_dir, "/tmp"}]}
  ]}.

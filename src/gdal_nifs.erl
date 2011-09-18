@@ -136,17 +136,7 @@ generate_tiles_alone_x(_Ty, Tmaxx, Tmaxx, _Tmaxz, _ImgHandler) ->
     ok;
 generate_tiles_alone_x(Ty, Tx, Tmaxx, Tmaxz, ImgHandler) ->
     {ok, Tile} = copyout_tile_for(Ty, Tx, Tmaxz, ImgHandler),
-    spawn(fun() ->
-        build_tile(Tile),
-        spawn(fun() ->
-            save_tile(Tile),
-            io:format("saved tile by: ~p~n", [self()])
-        end),
-        io:format("built tile by: ~p~n", [self()])
-    end)
-    ,
-%    spawn(?MODULE, build_and_save_tile, [Tile]),
-
+    tile_builder:build(Tile),
     generate_tiles_alone_x(Ty, Tx + 1, Tmaxx, Tmaxz, ImgHandler).
 
 

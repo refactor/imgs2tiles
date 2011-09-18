@@ -1,9 +1,11 @@
 %% -------------------------------------------------------------------
-%% Purpose:  Convert a raster into TMS (Tile Map Service) tiles in a directory or something else.
+%% Purpose:  Convert a raster into TMS (Tile Map Service) tiles in a directory 
+%%              or something else.
 %%           - support of global tiles (Spherical Mercator) for compatibility
 %%               with interactive web maps such as Google Maps
 %% 
-%% this is a clone implementent from gdal2tiles.py, but use elang do some parallel work for the speed
+%% this is a clone implementent from gdal2tiles.py, but use elang do 
+%%          some parallel work for the speed
 %% gdal2tiles.py is the work of Klokan Petr Pridal, klokan at klokan dot cz
 %%      Web:      http://www.klokan.cz/projects/gdal2tiles/
 %% 
@@ -53,5 +55,5 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    {ok, { {one_for_one, 5, 10}, []} }.
+    {ok, { {one_for_one, 5, 10}, [?CHILD(img_scanner, worker), ?CHILD(tile_builder, worker)]} }.
 
