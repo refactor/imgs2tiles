@@ -43,6 +43,7 @@
 -export([calc_zoomlevel_range/1, 
          copyout_tile/4,
          build_tile/1,
+         save_tile/1,
          calc_swne/1, 
          calc_tminmax/1]).
 
@@ -137,9 +138,14 @@ generate_tiles_alone_x(Ty, Tx, Tmaxx, Tmaxz, ImgHandler) ->
     {ok, Tile} = copyout_tile_for(Ty, Tx, Tmaxz, ImgHandler),
     spawn(fun() ->
         build_tile(Tile),
-        save_tile(Tile)
+        spawn(fun() ->
+            save_tile(Tile),
+            io:format("saved tile by: ~p~n", [self()])
+        end),
+        io:format("built tile by: ~p~n", [self()])
     end)
     ,
+%    spawn(?MODULE, build_and_save_tile, [Tile]),
 
     generate_tiles_alone_x(Ty, Tx + 1, Tmaxx, Tmaxz, ImgHandler).
 
@@ -151,7 +157,6 @@ copyout_tile_for(Ty, Tx, Tz, {Img, RasterInfo, {QuerySize, _TileSize}} = _ImgHan
             integer_to_list(Ty) ++ "." ++ ?TILE_EXT]),
     %% Create directories for the tile
     ok = filelib:ensure_dir(TileFilename),
-    io:format("tilefilename: ~p~n", [TileFilename]),
 
     %% Tile bounds in EPSG:900913
     {MinX, MinY, MaxX, MaxY} = mercator_tiles:tile_enclosure(Tx, Ty, Tz),
@@ -159,8 +164,7 @@ copyout_tile_for(Ty, Tx, Tz, {Img, RasterInfo, {QuerySize, _TileSize}} = _ImgHan
 
     {Rb, Wb} = mercator_tiles:geo_query(RasterInfo, Bound, QuerySize),
 
-    io:format("ReadRaster Extend: ~p ~p~n", [Rb, Wb]),
-    
+    io:format("tile: ~p, ReadRaster Extend: ~p ~p~n", [TileFilename, Rb, Wb]),
     copyout_tile(Img, Rb, Wb, TileFilename).
 
 
