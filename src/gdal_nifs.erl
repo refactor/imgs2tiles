@@ -41,16 +41,13 @@
 -export([get_meta/1]).
 
 -export([calc_zoomlevel_range/1, 
-         copyout_tile/4,
+         copyout_tile/3,
          build_tile/1,
-         save_tile/1,
+         save_tile/2,
          calc_swne/1, 
          calc_tminmax/1]).
 
 -include("gdal2tiles.hrl").
-
--define(OUTPUT, "/tmp").
--define(TILE_EXT, "png").
 
 %% QuerySize: How big should be query window be for scaling down
 %% Later on reset according the chosen resampling algorightm
@@ -136,26 +133,19 @@ generate_tiles_alone_x(_Ty, Tmaxx, Tmaxx, _Tmaxz, _ImgHandler) ->
     ok;
 generate_tiles_alone_x(Ty, Tx, Tmaxx, Tmaxz, ImgHandler) ->
     {ok, Tile} = copyout_tile_for(Ty, Tx, Tmaxz, ImgHandler),
-    tile_builder:build(Tile),
+    tile_builder:build(Tile, {Tx, Ty, Tmaxz}),
     generate_tiles_alone_x(Ty, Tx + 1, Tmaxx, Tmaxz, ImgHandler).
 
 
 -spec copyout_tile_for(integer(), integer(), byte(), imghandler()) -> {ok, tile()} | {error, string()}.
 copyout_tile_for(Ty, Tx, Tz, {Img, RasterInfo, {QuerySize, _TileSize}} = _ImgHandler) ->
-    TileFilename = filename:join([?OUTPUT, 
-            integer_to_list(Tz), integer_to_list(Tx), 
-            integer_to_list(Ty) ++ "." ++ ?TILE_EXT]),
-    %% Create directories for the tile
-    ok = filelib:ensure_dir(TileFilename),
-
     %% Tile bounds in EPSG:900913
     {MinX, MinY, MaxX, MaxY} = mercator_tiles:tile_enclosure(Tx, Ty, Tz),
     Bound = {MinX, MaxY, MaxX, MinY},
 
     {Rb, Wb} = mercator_tiles:geo_query(RasterInfo, Bound, QuerySize),
 
-    io:format("tile: ~p, ReadRaster Extend: ~p ~p~n", [TileFilename, Rb, Wb]),
-    copyout_tile(Img, Rb, Wb, TileFilename).
+    copyout_tile(Img, Rb, Wb).
 
 
 calc_tminmax(RasterInfo) ->
@@ -236,8 +226,8 @@ calc_data_bandscount(_Ref) ->
         _   -> exit("NIF library not loaded")
     end.
 
--spec copyout_tile(img(), bandregion(), bandregion(), string()) -> {ok, tile()} | {error, string()}.
-copyout_tile(_Img, _R, _W, _FileName) ->
+-spec copyout_tile(img(), bandregion(), bandregion()) -> {ok, tile()} | {error, string()}.
+copyout_tile(_Img, _R, _W) ->
     case random:uniform(999999999999) of
         666 -> {ok, make_ref()};
         999 -> {error, make_bogus_string()};
@@ -251,8 +241,8 @@ build_tile(_Tile) ->
         _   -> exit("NIF library not loaded")
     end.
 
--spec save_tile(Tile::tile()) -> ok.
-save_tile(_Tile) ->
+-spec save_tile(Tile::tile(), TileFileName::string()) -> ok.
+save_tile(_Tile, _TileFileName) ->
     case random:uniform(999999999999) of
         666 -> ok;
         _   -> exit("NIF library not loaded")

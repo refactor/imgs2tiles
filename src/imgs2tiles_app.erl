@@ -42,8 +42,6 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-    {ok, DefaultTilesDir} = application:get_env(imgs2tiles, default_tiles_dir),
-    io:format("default_tiles_dir: ~p~n", [DefaultTilesDir]),
     imgs2tiles_sup:start_link().
 
 stop(_State) ->

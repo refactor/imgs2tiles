@@ -106,7 +106,6 @@ typedef struct
     int tilebands;
     
     const char* options_resampling;
-    char* tilefilename;
 
     GByte* data;
     GByte* alpha;
@@ -147,9 +146,9 @@ static ErlNifFunc nif_funcs[] =
     {"warp_dataset", 1, gdal_nifs_warp_dataset},
     {"calc_data_bandscount", 1, gdal_nifs_calc_data_bandscount},
 
-    {"copyout_tile", 4, gdal_nifs_copyout_tile},
+    {"copyout_tile", 3, gdal_nifs_copyout_tile},
     {"build_tile", 1, gdal_nifs_build_tile},
-    {"save_tile", 1, gdal_nifs_save_tile},
+    {"save_tile", 2, gdal_nifs_save_tile},
 
     {"get_meta", 1, gdal_nifs_get_meta}
 };
@@ -398,16 +397,14 @@ static GDALResampleAlg parse_resampling(const char* option_resampling)
     }
 }
 
-static CPLErr scale_query_to_tile(GDALDatasetH dsquery, GDALDatasetH dstile, 
-                        const char* const tilefilename, const char* options_resampling)
+static CPLErr scale_query_to_tile(GDALDatasetH dsquery, GDALDatasetH dstile, const char* options_resampling)
 {
     LOG("Scales down query dataset to the tile dataset");
 
     int querysize = GDALGetRasterXSize(dsquery);
     int tilesize = GDALGetRasterXSize(dstile);
     int tilebands = GDALGetRasterCount(dstile);
-    LOG(" is calling ... tilefilename = %s, querysize: %d, tilesize: %d, tilebands: %d", 
-            tilefilename, querysize, tilesize, tilebands);
+    LOG(" is calling ... querysize: %d, tilesize: %d, tilebands: %d", querysize, tilesize, tilebands);
 
     if (options_resampling && strcmp("average", options_resampling) == 0) {
         LOG("sample average");
@@ -417,7 +414,7 @@ static CPLErr scale_query_to_tile(GDALDatasetH dsquery, GDALDatasetH dstile,
             GDALRasterBandH overviewBand = GDALGetRasterBand(dstile, i);
             CPLErr eErr = GDALRegenerateOverviews(GDALGetRasterBand(dsquery, i), 1, &overviewBand, "average", NULL, NULL);
             if (eErr != CE_None) {
-                LOG("GDALRegenerateOverviews failed on %s(band: %d), error: %s", tilefilename, i, CPLGetLastErrorMsg());
+                LOG("GDALRegenerateOverviews failed on (band: %d), error: %s", i, CPLGetLastErrorMsg());
                 return eErr;
             }
         }
@@ -440,7 +437,7 @@ static CPLErr scale_query_to_tile(GDALDatasetH dsquery, GDALDatasetH dstile,
                                          parse_resampling(options_resampling), 
                                          0.0, 0.0, NULL, NULL, NULL); 
         if (eErr != CE_None) {
-            LOG("GDALReprojectImage failed on %s, error %s", tilefilename, CPLGetLastErrorMsg());
+            LOG("GDALReprojectImage failed, error %s", CPLGetLastErrorMsg());
             return eErr;
         }
     }
@@ -492,11 +489,6 @@ static void free_tile(gdal_tile_handle* hTile)
     }
     
     free_temp_data(hTile);
-
-    if (hTile && hTile->tilefilename != NULL) {
-        free(hTile->tilefilename);
-        hTile->tilefilename = NULL;
-    }
 }
 
 static ERL_NIF_TERM gdal_nifs_build_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
@@ -512,7 +504,6 @@ static ERL_NIF_TERM gdal_nifs_build_tile(ErlNifEnv* env, int argc, const ERL_NIF
     GDALDatasetH dstile = hTile->dstile;
     GByte* data = hTile->data;
     GByte* alpha = hTile->alpha;
-    const char* const tilefilename = hTile->tilefilename;
     bandregion w = hTile->w;
 
     CPLErr eErr = CE_None;
@@ -593,7 +584,7 @@ static ERL_NIF_TERM gdal_nifs_build_tile(ErlNifEnv* env, int argc, const ERL_NIF
         }
 
         CPLErrorReset();
-        eErr = scale_query_to_tile(dsquery, dstile, tilefilename, hTile->options_resampling);
+        eErr = scale_query_to_tile(dsquery, dstile, hTile->options_resampling);
         GDALClose(dsquery);
 
         if (eErr == CE_Failure) {
@@ -616,12 +607,17 @@ static ERL_NIF_TERM gdal_nifs_save_tile(ErlNifEnv* env, int argc, const ERL_NIF_
         return enif_make_badarg(env);
     }
     
+    char tilefilename[256] = "";
+    if (enif_get_string(env, argv[1], tilefilename, 256, ERL_NIF_LATIN1) <= 0) {
+        return enif_make_badarg(env);
+    }
+
     gdal_priv_data* priv_data = (gdal_priv_data*) enif_priv_data(env);   
     GDALDriverH  hOutDriver = priv_data->hOutDriver;
 
     if ( ! ti->options_resampling || (strcmp("antialias", ti->options_resampling) != 0) ) {
         GDALDatasetH tileDataset = GDALCreateCopy(hOutDriver,
-                                                  ti->tilefilename, ti->dstile, 
+                                                  tilefilename, ti->dstile, 
                                                   FALSE, NULL, NULL, NULL);
         GDALClose(tileDataset);
     }
@@ -650,16 +646,11 @@ static ERL_NIF_TERM gdal_nifs_copyout_tile(ErlNifEnv* env, int argc, const ERL_N
         return enif_make_badarg(env);
     }
 
-    char* const tilefilename = calloc(256, sizeof(char));
-    enif_get_string(env, argv[3], tilefilename, 256, ERL_NIF_LATIN1);
-    LOG("tilefilename: %s", tilefilename);
-
     gdal_tile_handle* hTile = enif_alloc_resource(gdal_tile_RESOURCE, sizeof(*hTile));
     *hTile = (gdal_tile_handle) {
         .dstile = NULL,
         .data = NULL,
         .alpha = NULL,
-        .tilefilename = tilefilename,
         .w = w,
         .querysize = hImg->querysize,
         .tilesize = hImg->tilesize,
