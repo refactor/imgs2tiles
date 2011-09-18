@@ -1,0 +1,31 @@
+performance test:
+test data:
+    Driver: GTiff/GeoTIFF
+    Files: ../tz/tzh.tif  ( 287M )
+    Size is 9983, 10028
+    Coordinate System is:
+    PROJCS["WGS 84 / Pseudo-Mercator",
+
+gdal2tiles.py process time: ( 172 seconds )
+    $ time gdal2tiles.py tzh.tif 
+    Generating Base Tiles:
+    0...10...20...30...40...50...60...70...80...90...100 - done.
+    Generating Overview Tiles:
+    0...10...20...30...40...50...60...70...80...90...100 - done.
+
+    real    2m51.962s
+    user    2m42.670s
+    sys 0m3.720s
+
+build and save tile in one erlang process:
+    {191508043,ok}
+
+build and save tile in different erlang processes:
+    {119446860,ok}
+    {121000628,ok}
+    {130312828,ok}
+    {122297904,ok}
+    {129117740,ok}
+    {127541144,ok}
+    {117261369,ok}
+    {127756223,ok}

@@ -1,10 +1,12 @@
 %% -------------------------------------------------------------------
-%% Purpose:  Convert a raster into TMS (Tile Map Service) tiles in a directory or something else as fast as possible.
+%% Purpose:  Convert a raster into TMS (Tile Map Service) tiles in a directory or 
+%%              something else as fast as possible.
 %%           - support of global tiles (Spherical Mercator) for compatibility
 %%               with interactive web maps such as Google Maps
 %% 
-%% this is a clone implementent from gdal2tiles.py, but use elang do some parallel work for the speed
-%% gdal2tiles.py is the work of Klokan Petr Pridal, klokan at klokan dot cz
+%% this is a clone implementent from gdal2tiles.py, but use elang do some parallel 
+%% work for the speed
+%%  gdal2tiles.py is the work of Klokan Petr Pridal, klokan at klokan dot cz
 %%      Web:      http://www.klokan.cz/projects/gdal2tiles/
 %% 
 %% -------------------------------------------------------------------
@@ -105,7 +107,13 @@
 %% ------------------------------------------------------------------------------------------------
 -module(mercator_tiles).
 
--export([latlon_to_meters/2, meters_to_latlon/2, meters_to_tile/3, tile_enclosure/3, tile_latlon_bounds/3, zoom_for_pixelsize/1]).
+-export([latlon_to_meters/2, 
+         meters_to_latlon/2, 
+         meters_to_tile/3, 
+         tile_enclosure/3, 
+         tile_latlon_bounds/3, 
+         zoom_for_pixelsize/1]).
+
 -export([resolution/1]).
 -export([quadtree/3]).
 -export([geo_query/3]).
@@ -183,11 +191,12 @@ quadtree(TX, TY, Zoom) ->
     Ty = trunc(math:pow(2, Zoom) - 1 - TY),
     quadtree(TX, Ty, Zoom, "").
 
-%% @doc For given dataset and query in cartographic coordinates returns parameters for ReadRaster() in raster coordinates and
-%% x/y shifts (for border tiles). If the querysize is not given, the extent is returned in the native resolution of dataset ds.
+%% @doc For given dataset and query in cartographic coordinates returns parameters for ReadRaster() in 
+%% raster coordinates and x/y shifts (for border tiles). If the querysize is not given, the extent is 
+%% returned in the native resolution of dataset ds.
 %% {LeftTopX, LeftTopY, RightBottomX, RightBottomY} = _Bound
 -spec geo_query(rasterinfo(), bound(), non_neg_integer()) -> {bandregion(), bandregion()}.
-geo_query({OriginX, OriginY, PixelSizeX, PixelSizeY, RasterXSize, RasterYSize} =_RasterInfo, {Ulx, Uly, Lrx, Lry} = _Bound, QuerySize) ->
+geo_query({OriginX, OriginY, PixelSizeX, PixelSizeY, RasterXSize, RasterYSize}, {Ulx, Uly, Lrx, Lry}, QuerySize) ->
     Rx = trunc( (Ulx - OriginX) / PixelSizeX + 0.001 ),
     Ry = trunc( (Uly - OriginY) / PixelSizeY + 0.001 ),
     Rxsize = trunc( (Lrx - Ulx) / PixelSizeX + 0.5 ),
@@ -319,7 +328,8 @@ pixels_to_meters_test_() ->
 meters_to_pixels_test_() ->
     [
         ?_test(math_utils:xy_assert({10000, 10000}, meters_to_pixels(762677661.29741549, 762677661.29741549, 1))),
-        ?_test(math_utils:xy_assert({1700.9777777777776, 1272.6698849462664}, meters_to_pixels(13247019.404399557, 4865942.2795031769, 3)))
+        ?_test(math_utils:xy_assert({1700.9777777777776, 1272.6698849462664}, 
+                                    meters_to_pixels(13247019.404399557, 4865942.2795031769, 3)))
     ].
 
 pixels_to_tile_test() ->
@@ -331,11 +341,13 @@ meters_to_tile_test() ->
     math_utils:xy_assert({26, 19}, meters_to_tile(13247019.404399557, 4865942.2795031769, 5)).
 
 tile_enclosure_test() ->
-    math_utils:swne_assert({-20037508.342789244, -20037508.342789244, 20037508.342789244, 20037508.342789244}, tile_enclosure(0, 0, 0)).
+    math_utils:swne_assert({-20037508.342789244, -20037508.342789244, 20037508.342789244, 20037508.342789244}, 
+                            tile_enclosure(0, 0, 0)).
 
 tile_latlon_bounds_test() ->
     math_utils:swne_assert({-85.051128779806589, -180.0, 85.051128779806604, 180.0}, tile_latlon_bounds(0,0,0)),
-    math_utils:swne_assert({-84.959304956238341, -171.5625, -84.943836614828442, -171.38671875}, tile_latlon_bounds(48, 6, 11)).
+    math_utils:swne_assert({-84.959304956238341, -171.5625, -84.943836614828442, -171.38671875}, 
+                           tile_latlon_bounds(48, 6, 11)).
 
 zoom_for_pixelsize_test() ->
     ?assertEqual(0, zoom_for_pixelsize(1000000)),
