@@ -24,7 +24,7 @@ start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 scan_img(ImgFileName) ->
-    gen_server:call(?MODULE, {scan, ImgFileName}).
+    gen_server:cast(?MODULE, {scan, ImgFileName}).
 
 %% ------------------------------------------------------------------
 %% gen_server Function Definitions
@@ -33,15 +33,15 @@ scan_img(ImgFileName) ->
 init(Args) ->
     {ok, Args}.
 
-handle_call({scan, ImgFileName}, _From, State) ->
+handle_call(_Request, _From, State) ->
+    {noreply, ok, State}.
+
+handle_cast({scan, ImgFileName}, State) ->
     {ok, HI} = gdal_nifs:open(ImgFileName),
     {ElapseTime, ok} = timer:tc(gdal_nifs, generate_base_tiles, [HI]),
     io:format("scan img time: ~p~n", [ElapseTime]),
     gdal_nifs:close(HI),
-    {reply, ok, State};
-handle_call(_Request, _From, State) ->
-    {noreply, ok, State}.
-
+    {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 

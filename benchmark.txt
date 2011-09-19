@@ -29,3 +29,5 @@ build and save tile in different erlang processes:
     {127541144,ok}
     {117261369,ok}
     {127756223,ok}
+scan img.....
+     111448287
