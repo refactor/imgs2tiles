@@ -1,7 +1,5 @@
 %% -------------------------------------------------------------------
-%% tile_builder: used to build finished base-tile from primal tile the primal 
-%%              tile, which has orignal copyout tile-data and alpha band, 
-%%              is just copyouted from original raster-image
+%% tile_reducer: used to generate overview-tiles
 %%
 %% -------------------------------------------------------------------
 %%  Copyright (c) 2011
@@ -24,7 +22,7 @@
 %%   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 %%   DEALINGS IN THE SOFTWARE.
 %% -------------------------------------------------------------------
--module(tile_builder).
+-module(tile_reducer).
 -behaviour(gen_server).
 -define(SERVER, ?MODULE).
 
@@ -34,7 +32,7 @@
 
 -export([start_link/0]).
 
--export([build/2]).
+-export([generate_overview_tile/1]).
 
 %% ------------------------------------------------------------------
 %% gen_server Function Exports
@@ -50,8 +48,8 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-build(Tile, {Tx, Ty, Tz}) ->
-    gen_server:cast(?MODULE, {build_tile, Tile, {Tx, Ty, Tz}}).
+generate_overview_tile(TileInfo) ->
+    gen_server:cast(?MODULE, {reduce_tiles, TileInfo}).
 
 %% ------------------------------------------------------------------
 %% gen_server Function Definitions
@@ -63,12 +61,8 @@ init(Args) ->
 handle_call(_Request, _From, State) ->
     {noreply, ok, State}.
 
-handle_cast({build_tile, Tile, {Tx, Ty, Tz}}, State) ->
-    io:format("build tile: ~p~n", [Tile]),
-    gdal_nifs:build_tile(Tile),
-    TileInfo = {Tile, Tx, Ty, Tz},
-    tile_saver:save(TileInfo),
-    tile_reducer:generate_overview_tile(TileInfo),
+handle_cast({reduce_tiles, {_Tile, Tx, Ty, Tz}}, State) ->
+    io:format("Tx: ~p, Ty: ~p, Tz:~p -> by ~p~n", [Tx, Ty, Tz, self()]),
     {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.

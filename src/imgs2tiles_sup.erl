@@ -55,5 +55,14 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    {ok, { {one_for_one, 5, 10}, [?CHILD(img_scanner, worker), ?CHILD(tile_builder, worker)]} }.
+    {ok, 
+        { 
+            {one_for_one, 5, 10}, [
+                ?CHILD(img_scanner,  worker), 
+                ?CHILD(tile_builder, worker),
+                ?CHILD(tile_saver,   worker),
+                ?CHILD(tile_reducer, worker)
+            ]
+        } 
+    }.
 
