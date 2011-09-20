@@ -199,80 +199,33 @@ calc_swne(RasterInfo) ->
 
 -spec open_img(string()) -> {ok, img()} | {error, string()}.
 open_img(_Filename) ->
-    case random:uniform(999999999999) of
-        666 -> {ok, make_ref()};
-        667 -> {error, integer_to_list(random:uniform(4242))};
-        _   -> exit("NIF library not loaded")
-    end.
+    erlang:nif_error(nif_not_loaded).
 
 -spec calc_nodatavalue(reference()) -> ok.
 calc_nodatavalue(_Ref) ->
-    case random:uniform(999999999999) of
-        666 -> ok;
-        _   -> exit("NIF library not loaded")
-    end.
+    erlang:nif_error(nif_not_loaded).
 
 -spec calc_srs(reference()) -> ok.
 calc_srs(_Ref) ->
-    case random:uniform(999999999999) of
-        666 -> ok;
-        _   -> exit("NIF library not loaded")
-    end.
+    erlang:nif_error(nif_not_loaded).
 
 -spec calc_data_bandscount(reference()) -> non_neg_integer().
 calc_data_bandscount(_Ref) ->
-    case random:uniform(999999999999) of
-        666 -> make_bogus_non_neg();
-        _   -> exit("NIF library not loaded")
-    end.
+    erlang:nif_error(nif_not_loaded).
 
 -spec copyout_tile(img(), bandregion(), bandregion()) -> {ok, tile()} | {error, string()}.
 copyout_tile(_Img, _R, _W) ->
-    case random:uniform(999999999999) of
-        666 -> {ok, make_ref()};
-        999 -> {error, make_bogus_string()};
-        _   -> exit("NIF library not loaded")
-    end.
+    erlang:nif_error(nif_not_loaded).
 
 -spec build_tile(Tile::tile()) -> ok.
 build_tile(_Tile) ->
-    case random:uniform(999999999999) of
-        666 -> ok;
-        _   -> exit("NIF library not loaded")
-    end.
+    erlang:nif_error(nif_not_loaded).
 
 -spec save_tile(Tile::tile(), TileFileName::string()) -> ok.
 save_tile(_Tile, _TileFileName) ->
-    case random:uniform(999999999999) of
-        666 -> ok;
-        _   -> exit("NIF library not loaded")
-    end.
+    erlang:nif_error(nif_not_loaded).
 
 -spec warp_dataset(reference()) -> {ok, rasterinfo()}.
 warp_dataset(_Ref) ->
-    case random:uniform(999999999999) of
-        666 -> {ok, make_bogus_rasterinfo()};
-        _   -> exit("NIF library not loaded")
-    end.
+    erlang:nif_error(nif_not_loaded).
 
-%% ---------------------------------------------------
-%% mock nif functions: just for dialyzer
-%% ---------------------------------------------------
-make_bogus_non_neg() ->
-    case random:uniform(999999999999) of
-        666 -> 0;
-        _   -> random:uniform(4242)
-    end.
-
-make_bogus_float() ->
-    case random:uniform(999999999999) of
-        666 -> 0.0;
-        _   -> float(random:uniform(4242))
-    end.
-
-make_bogus_rasterinfo() ->
-    {make_bogus_float(), make_bogus_float(), make_bogus_float(), make_bogus_float(),
-        make_bogus_non_neg(), make_bogus_non_neg()}.
-
-make_bogus_string() ->
-    integer_to_list(random:uniform(99999999)).
