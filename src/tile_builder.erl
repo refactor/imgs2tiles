@@ -64,8 +64,8 @@ handle_call(_Request, _From, State) ->
     {noreply, ok, State}.
 
 handle_cast({build_tile, Tile, {Tx, Ty, Tz}}, State) ->
-    io:format("build tile: ~p~n", [Tile]),
     gdal_nifs:build_tile(Tile),
+    io:format("built tile(Tx: ~p, Ty: ~p, Tz: ~p) in process: ~p~n", [Tx, Ty, Tz, self()]),
     TileInfo = {Tile, Tx, Ty, Tz},
     tile_saver:save(TileInfo),
     tile_reducer:generate_overview_tile(TileInfo),

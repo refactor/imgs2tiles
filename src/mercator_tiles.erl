@@ -115,7 +115,7 @@
          zoom_for_pixelsize/1]).
 
 -export([resolution/1]).
--export([quadtree/3]).
+-export([parent_quadtree/3, quadtree/3]).
 -export([geo_query/3]).
 
 -include("gdal2tiles.hrl").
@@ -184,6 +184,11 @@ zoom_for_pixelsize(PixelSize) ->
 -spec(resolution(Zoom::byte()) -> float()).
 resolution(Zoom) ->
     ?INITIAL_RESOLUTION / math:pow(2, Zoom).
+
+-spec parent_quadtree(Tx::integer(), Ty::integer(), Z::byte()) -> {ParentQuadtree::string(), ChildPosition::string()}.
+parent_quadtree(Tx, Ty, Z) ->
+    Quadtree = quadtree(Tx, Ty, Z),
+    lists:split(length(Quadtree)-1, Quadtree).
 
 %% @doc Converts TMS tile coordinates to Microsoft QuadTree
 -spec(quadtree(TX::integer(), TY::integer(), Zoom::byte()) -> string()).
@@ -357,7 +362,14 @@ zoom_for_pixelsize_test() ->
     ?assertEqual(3, zoom_for_pixelsize(10000)).
 
 quadtree_test() ->
+    ?assertEqual("2222222", quadtree(0, 0, 7)),
+    ?assertEqual("113113", quadtree(-1, -10, 6)),
+    ?assertEqual("2221", quadtree(1, 1, 4)),
     ?assertEqual("22221", quadtree(1, 1, 5)).
+
+parent_quadtree_test() ->
+    ?assertEqual({"333333333333021","3"}, parent_quadtree(-13, 10, 16)),
+    ?assertEqual({"222222","2"}, parent_quadtree(0, 0, 7)).
 
 geo_quert_test() ->
     {OriginX, OriginY} = {13024084.000533571, 4184269.256414418},

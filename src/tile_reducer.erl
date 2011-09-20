@@ -62,7 +62,8 @@ handle_call(_Request, _From, State) ->
     {noreply, ok, State}.
 
 handle_cast({reduce_tiles, {_Tile, Tx, Ty, Tz}}, State) ->
-    io:format("Tx: ~p, Ty: ~p, Tz:~p -> by ~p~n", [Tx, Ty, Tz, self()]),
+    io:format("generate_overview_tile Tx: ~p, Ty: ~p, Tz:~p -> by ~p~n", [Tx, Ty, Tz, self()]),
+    {ParentQuadtree, ChildPosition} = mercator_tiles:parent_quadtree(Tx, Ty, Tz),
     {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.

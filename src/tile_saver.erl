@@ -69,7 +69,7 @@ handle_cast({save_tile, {Tile, Tx, Ty, Tz} = _TileInfo}, State) ->
             integer_to_list(Ty) ++ "." ++ DefaultTileFileExt]),
     %% Create directories for the tile
     ok = filelib:ensure_dir(TileFilename),
-
+    io:format("saved tile(~p) by process: ~p~n", [TileFilename, self()]),
     gdal_nifs:save_tile(Tile, TileFilename),
     {noreply, State};
 handle_cast(_Msg, State) ->
