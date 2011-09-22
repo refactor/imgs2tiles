@@ -3,7 +3,7 @@
 %%% @copyright 2011
 %%% @doc tile_reducer: used to generate overview-tiles
 %%% @end
-%% -------------------------------------------------------------------
+%%% -------------------------------------------------------------------
 %%  Copyright (c) 2011
 %%
 %%   Permission is hereby granted, free of charge, to any person obtaining a

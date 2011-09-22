@@ -1,15 +1,8 @@
-%% -------------------------------------------------------------------
-%% Purpose:  Convert a raster into TMS (Tile Map Service) tiles in a 
-%%              directory or something else.
-%%           - support of global tiles (Spherical Mercator) for compatibility
-%%               with interactive web maps such as Google Maps
-%% 
-%% this is a clone implementent from gdal2tiles.py, but use elang do some 
-%% parallel work for the speed
-%% gdal2tiles.py is the work of Klokan Petr Pridal, klokan at klokan dot cz
-%%      Web:      http://www.klokan.cz/projects/gdal2tiles/
-%% 
-%% -------------------------------------------------------------------
+%%% -------------------------------------------------------------------
+%%% @author wulei <mjollnir.ray@gmail.com>
+%%% @copyright 2011
+%%% @end
+%%% -------------------------------------------------------------------
 %%  Copyright (c) 2011
 %%
 %%   Permission is hereby granted, free of charge, to any person obtaining a

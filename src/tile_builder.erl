@@ -1,9 +1,11 @@
-%% -------------------------------------------------------------------
-%% tile_builder: used to build finished base-tile from primal tile the primal 
-%%              tile, which has orignal copyout tile-data and alpha band, 
-%%              is just copyouted from original raster-image
-%%
-%% -------------------------------------------------------------------
+%%% -------------------------------------------------------------------
+%%% @author wulei <mjollnir.ray@gmail.com>
+%%% @copyright 2011
+%%% @doc tile_builder: used to build finished base-tile from primal tile the primal 
+%%%             tile, which has orignal copyout tile-data and alpha band, 
+%%%             is just copyouted from original raster-image
+%%% @end
+%%% -------------------------------------------------------------------
 %%  Copyright (c) 2011
 %%
 %%   Permission is hereby granted, free of charge, to any person obtaining a

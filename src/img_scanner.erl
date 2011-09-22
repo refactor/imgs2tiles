@@ -1,10 +1,12 @@
-%% -------------------------------------------------------------------
-%% img_scanner: used to scan the original raster imagine file and 
-%%              divide it into primal tiles
-%%              the copyout primal tile will send to tile_builder for 
-%%              generating finished tile
-%%
-%% -------------------------------------------------------------------
+%%% -------------------------------------------------------------------
+%%% @author wulei <mjollnir.ray@gmail.com>
+%%% @copyright 2011
+%%% @doc img_scanner: used to scan the original raster imagine file and 
+%%%              divide it into primal tiles
+%%%              the copyout primal tile will send to tile_builder for 
+%%%              generating finished tile
+%%% @end
+%%% -------------------------------------------------------------------
 %%  Copyright (c) 2011
 %%
 %%   Permission is hereby granted, free of charge, to any person obtaining a
