@@ -41,32 +41,39 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
+-record(state, { tiles_dir,
+                 tile_file_ext}).
+
 %% ------------------------------------------------------------------
 %% API Function Definitions
 %% ------------------------------------------------------------------
 
 start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+    {ok, DefaultTilesDir} = application:get_env(imgs2tiles, default_tiles_dir),
+    {ok, DefaultTileFileExt} = application:get_env(imgs2tiles, default_tilefile_ext),
+    SaveState = #state{tiles_dir=DefaultTilesDir, tile_file_ext=DefaultTileFileExt},
+    gen_server:start_link({local, ?SERVER}, ?MODULE, [SaveState], []).
 
 save({_Tile, _Tx, _Ty, _Tz} = TileInfo) ->
-    gen_server:cast(?MODULE, {save_tile, TileInfo}).
+    gen_server:cast(?SERVER, {save, TileInfo}).
 
 %% ------------------------------------------------------------------
 %% gen_server Function Definitions
 %% ------------------------------------------------------------------
 
-init(Args) ->
-    {ok, Args}.
+init([SaveState]) ->
+    io:format("~p init args: ~p~n", [?MODULE, SaveState]),
+    {ok, SaveState}.
 
 handle_call(_Request, _From, State) ->
     {noreply, ok, State}.
 
-handle_cast({save_tile, {Tile, Tx, Ty, Tz} = _TileInfo}, State) ->
-    {ok, DefaultTilesDir} = application:get_env(imgs2tiles, default_tiles_dir),
-    {ok, DefaultTileFileExt} = application:get_env(imgs2tiles, default_tilefile_ext),
-    TileFilename = filename:join([DefaultTilesDir, 
+handle_cast({save, {Tile, Tx, Ty, Tz} = _TileInfo}, State) ->
+    SaveTilesToDir = State#state.tiles_dir,
+    TilesFileExt = State#state.tile_file_ext,
+    TileFilename = filename:join([SaveTilesToDir, 
             integer_to_list(Tz), integer_to_list(Tx), 
-            integer_to_list(Ty) ++ "." ++ DefaultTileFileExt]),
+            integer_to_list(Ty) ++ "." ++ TilesFileExt]),
     %% Create directories for the tile
     ok = filelib:ensure_dir(TileFilename),
     io:format("saved tile(~p) by process: ~p~n", [TileFilename, self()]),
