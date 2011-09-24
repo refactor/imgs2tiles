@@ -34,7 +34,10 @@
 
 -export([start_link/0]).
 
--export([generate_overview_tile/1]).
+-export([
+        get_count/0,
+        generate_overview_tile/1
+        ]).
 
 %% ------------------------------------------------------------------
 %% gen_server callbacks
@@ -43,9 +46,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(state, {table}).
--record(tree_node, { parent_quadtree, 
-                     tile_list}).
+-record(state, {tile_dict}).
 
 %% ------------------------------------------------------------------
 %% API Function Definitions
@@ -53,6 +54,9 @@
 
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+
+get_count() ->
+    gen_server:call(?MODULE, get_count).
 
 generate_overview_tile(TileInfo) ->
     gen_server:cast(?MODULE, {reduce_tiles, TileInfo}).
@@ -63,25 +67,21 @@ generate_overview_tile(TileInfo) ->
 
 init(Args) ->
     io:format("~p init args: ~p~n", [?MODULE, Args]),
-    {ok, #state{ table = ets:new(quadtree_table, [named_table, {keypos, #tree_node.parent_quadtree}])}}.
+    {ok, #state{ tile_dict = dict:new() }}.
 
+handle_call(get_count, _From, State) ->
+    {reply, dict:size(State#state.tile_dict), State};
 handle_call(_Request, _From, State) ->
     {noreply, ok, State}.
 
 handle_cast({reduce_tiles, {_Tile, Tx, Ty, Tz} = TileInfo}, State) ->
     io:format("generate_overview_tile Tx: ~p, Ty: ~p, Tz:~p -> by ~p~n", [Tx, Ty, Tz, self()]),
     {ParentQuadtree, ChildPosition} = mercator_tiles:parent_quadtree(Tx, Ty, Tz),
-    Tiles = ets:lookup(State#state.table, ParentQuadtree),
-    if 
-        length(Tiles) =:= 0 ->
-            TN = #tree_node{parent_quadtree=ParentQuadtree, tile_list=[{ChildPosition,TileInfo}]},
-            ets:insert(State#state.table, TN);
-        true ->
-            TN = lists:nth(1, Tiles),
-            NewTN = TN#tree_node{tile_list = [{ChildPosition,TileInfo} | TN#tree_node.tile_list]},
-            ets:insert(State#state.table, NewTN)
-    end,
-    {noreply, State};
+    NewTileDict = dict:update(ParentQuadtree, 
+                              fun(ExistsTileList) -> [{ChildPosition, TileInfo} | ExistsTileList] end, 
+                              [{ChildPosition, TileInfo}], 
+                              State#state.tile_dict),
+    {noreply, #state{ tile_dict = NewTileDict }};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
