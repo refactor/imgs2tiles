@@ -1,7 +1,7 @@
 %%% -------------------------------------------------------------------
 %%% @author wulei <mjollnir.ray@gmail.com>
 %%% @copyright 2011
-%%% @doc tile_reducer: used to generate overview-tiles
+%%% @doc tile_collector: used to collect overview-tiles
 %%% @end
 %%% -------------------------------------------------------------------
 %%  Copyright (c) 2011
@@ -24,7 +24,7 @@
 %%   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 %%   DEALINGS IN THE SOFTWARE.
 %% -------------------------------------------------------------------
--module(tile_reducer).
+-module(tile_collector).
 -behaviour(gen_server).
 -define(SERVER, ?MODULE).
 
@@ -35,8 +35,9 @@
 -export([start_link/0]).
 
 -export([
-        get_count/0,
-        generate_overview_tile/1
+        reduce_tile/1,
+        discard_tiles/1,
+        get_count/0
         ]).
 
 %% ------------------------------------------------------------------
@@ -55,11 +56,14 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-get_count() ->
-    gen_server:call(?MODULE, get_count).
+reduce_tile(TileInfo) ->
+    gen_server:cast(?SERVER, {reduce_tile, TileInfo}).
 
-generate_overview_tile(TileInfo) ->
-    gen_server:cast(?MODULE, {reduce_tiles, TileInfo}).
+discard_tiles(ParentQuadtree) ->
+    gen_server:cast(?SERVER, {discard_tiles, ParentQuadtree}).
+
+get_count() ->
+    gen_server:call(?SERVER, get_count).
 
 %% ------------------------------------------------------------------
 %% gen_server Function Definitions
@@ -74,13 +78,23 @@ handle_call(get_count, _From, State) ->
 handle_call(_Request, _From, State) ->
     {noreply, ok, State}.
 
-handle_cast({reduce_tiles, {_Tile, Tx, Ty, Tz} = TileInfo}, State) ->
-    io:format("generate_overview_tile Tx: ~p, Ty: ~p, Tz:~p -> by ~p~n", [Tx, Ty, Tz, self()]),
+handle_cast({discard_tiles, ParentQuadtree}, State) ->
+    NewTileDict = dict:erase(ParentQuadtree, State#state.tile_dict),
+    {noreply, #state{ tile_dict = NewTileDict }};
+handle_cast({reduce_tile, {_Tile, Tx, Ty, Tz} = TileInfo}, State) ->
+    io:format("reduce_tile Tx: ~p, Ty: ~p, Tz:~p -> by ~p~n", [Tx, Ty, Tz, self()]),
     {ParentQuadtree, ChildPosition} = mercator_tiles:parent_quadtree(Tx, Ty, Tz),
     NewTileDict = dict:update(ParentQuadtree, 
                               fun(ExistsTileList) -> [{ChildPosition, TileInfo} | ExistsTileList] end, 
                               [{ChildPosition, TileInfo}], 
                               State#state.tile_dict),
+    TileList = dict:fetch(ParentQuadtree, NewTileDict),
+    if
+        length(TileList) =:= 4 ->
+            overview_tile_builder:generate(ParentQuadtree, TileList);
+        true ->
+            ok
+    end,
     {noreply, #state{ tile_dict = NewTileDict }};
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -97,4 +111,3 @@ code_change(_OldVsn, State, _Extra) ->
 %% ------------------------------------------------------------------
 %% Internal Function Definitions
 %% ------------------------------------------------------------------
-

@@ -36,7 +36,9 @@
 
 -export([start_link/0]).
 
--export([build/2]).
+-export([
+        build/2
+        ]).
 
 %% ------------------------------------------------------------------
 %% gen_server Function Exports
@@ -70,7 +72,7 @@ handle_cast({build, Tile, {Tx, Ty, Tz}}, State) ->
     io:format("built tile(Tx: ~p, Ty: ~p, Tz: ~p) in process: ~p~n", [Tx, Ty, Tz, self()]),
     TileInfo = {Tile, Tx, Ty, Tz},
     tile_saver:save(TileInfo),
-    tile_reducer:generate_overview_tile(TileInfo),
+    tile_collector:reduce_tile(TileInfo),
     {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
