@@ -491,6 +491,42 @@ static void free_tile(gdal_tile_handle* hTile)
     free_temp_data(hTile);
 }
 
+static CPLErr write_data_and_alpha_to_raster(GDALDatasetH dsquery, 
+                              int xoffset, int yoffset, int xsize, int ysize, 
+                              GByte* data, GByte* alpha, 
+                              int dataBandsCount, int tilebands) 
+{
+    LOG("data and alpha WriteRaster");
+    CPLErrorReset();
+
+    int band_list[dataBandsCount];
+    fill_pband_list(dataBandsCount, band_list);
+
+    CPLErr eErr = GDALDatasetRasterIO(dsquery, GF_Write,
+                               xoffset, yoffset, xsize, ysize, data, 
+                               xsize, ysize, GDT_Byte, 
+                               dataBandsCount, band_list,
+                               0, 0, 0);
+    if (eErr == CE_Failure) {
+        LOG("data WriteRaster(wx: %d, wy: %d, wxsize: %d, wysize: %d, data: %p) for dsquery failed: %s", 
+                xoffset, yoffset, xsize, ysize, data,
+                CPLGetLastErrorMsg());
+
+        return eErr;
+    }
+
+    int pBandList[] = {tilebands};
+    eErr = GDALDatasetRasterIO(dsquery, GF_Write,
+                               xoffset, yoffset, xsize, ysize, alpha, 
+                               xsize, ysize, GDT_Byte, 
+                               1, pBandList, 
+                               0, 0, 0);
+    if (eErr == CE_Failure) {
+        LOG("alpha WriteRaster dsquery failed: %s", CPLGetLastErrorMsg());
+    }
+    return eErr;
+}
+
 static ERL_NIF_TERM gdal_nifs_build_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     gdal_tile_handle* hTile;
@@ -511,24 +547,15 @@ static ERL_NIF_TERM gdal_nifs_build_tile(ErlNifEnv* env, int argc, const ERL_NIF
         LOG("tilesize(%d) == querysize(%d)", hTile->tilesize, hTile->querysize);
         //GDALDataType ntype = GDALGetRasterDataType( GDALGetRasterBand( dstile, GDALGetRasterCount(dstile) - 1 ) );
         // Use the ReadRaster result directly in tiles ('nearest neighbour' query)
-        CPLErrorReset();
-        eErr = GDALDatasetRasterIO(dstile, GF_Write,
-                                   w.xoffset, w.yoffset, w.xsize, w.ysize, data, 
-                                   w.xsize, w.ysize, GDT_Byte, 0, NULL, 
-                                   0, 0, 0);
+        int xoffset = w.xoffset;
+        int yoffset = w.yoffset;
+        int xsize = w.xsize;
+        int ysize = w.ysize;
+        int dataBandsCount = hTile->dataBandsCount;
+        int tilebands = hTile->tilebands;
+        eErr = write_data_and_alpha_to_raster(dstile, xoffset, yoffset, xsize, ysize, data, alpha, dataBandsCount, tilebands);
         if (eErr == CE_Failure) {
-            LOG("data WriteRaster failed: %s", CPLGetLastErrorMsg());
-            return enif_make_badarg(env);
-        }
-
-        CPLErrorReset();
-        int pBandList[] = {hTile->tilebands};
-        eErr = GDALDatasetRasterIO(dstile, GF_Write,
-                                   w.xoffset, w.yoffset, w.xsize, w.ysize, alpha, 
-                                   w.xsize, w.ysize, GDT_Byte, 0, pBandList, 
-                                   0, 0, 0);
-        if (eErr == CE_Failure) {
-            LOG("alpha WriteRaster failed: %s", CPLGetLastErrorMsg());
+            LOG("data or alpha WriteRaster failed: %s", CPLGetLastErrorMsg());
             return enif_make_badarg(env);
         }
 
@@ -550,34 +577,17 @@ static ERL_NIF_TERM gdal_nifs_build_tile(ErlNifEnv* env, int argc, const ERL_NIF
             return enif_make_badarg(env);
         }
 
-        CPLErrorReset();
-
-        int band_list[hTile->dataBandsCount];
-        fill_pband_list(hTile->dataBandsCount, band_list);
-
-        eErr = GDALDatasetRasterIO(dsquery, GF_Write,
-                                   w.xoffset, w.yoffset, w.xsize, w.ysize, data, 
-                                   w.xsize, w.ysize, GDT_Byte, 
-                                   hTile->dataBandsCount, band_list,
-                                   0, 0, 0);
+        int xoffset = w.xoffset;
+        int yoffset = w.yoffset;
+        int xsize = w.xsize;
+        int ysize = w.ysize;
+        int dataBandsCount = hTile->dataBandsCount;
+        int tilebands = hTile->tilebands;
+        eErr = write_data_and_alpha_to_raster(dsquery, xoffset, yoffset, xsize, ysize, data, alpha, dataBandsCount, tilebands);
         if (eErr == CE_Failure) {
-            LOG("data WriteRaster(wx: %d, wy: %d, wxsize: %d, wysize: %d, data: %p) for dsquery failed: %s", 
+            LOG("data or alpha WriteRaster(wx: %d, wy: %d, wxsize: %d, wysize: %d, data: %p) for dsquery failed: %s", 
                     w.xoffset, w.yoffset, w.xsize, w.ysize, data,
                     CPLGetLastErrorMsg());
-
-            GDALClose(dsquery);
-            return enif_make_badarg(env);
-        }
-
-        CPLErrorReset();
-        int pBandList[] = {hTile->tilebands};
-        eErr = GDALDatasetRasterIO(dsquery, GF_Write,
-                                   w.xoffset, w.yoffset, w.xsize, w.ysize, alpha, 
-                                   w.xsize, w.ysize, GDT_Byte, 
-                                   1, pBandList, 
-                                   0, 0, 0);
-        if (eErr == CE_Failure) {
-            LOG("alpha WriteRaster dsquery failed: %s", CPLGetLastErrorMsg());
 
             GDALClose(dsquery);
             return enif_make_badarg(env);
@@ -593,7 +603,7 @@ static ERL_NIF_TERM gdal_nifs_build_tile(ErlNifEnv* env, int argc, const ERL_NIF
         }
     }
 
-    free_temp_data(hTile);
+//    free_temp_data(hTile);  DO NOT free, it wiil be reused when generate overview tile.
 
     return ATOM_OK;
 }
