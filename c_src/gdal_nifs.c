@@ -525,7 +525,6 @@ static ERL_NIF_TERM gdal_nifs_generate_overview_tile(ErlNifEnv* env, int argc, c
     CPLErr eErr = CE_None;
     CPLErrorReset();
     // Big ReadRaster query in memory scaled to the tilesize - all but 'near' algo
-    DEBUG("create dsquery MEM dataset\r\n");
     GDALDatasetH dsquery = GDALCreate(hMemDriver, "", 
                                       2*tilesize, 2*tilesize, tilebands,
                                       GDT_Byte, NULL);
@@ -539,7 +538,7 @@ static ERL_NIF_TERM gdal_nifs_generate_overview_tile(ErlNifEnv* env, int argc, c
         tileposx = (0x01 & i) * tilesize;
         tileposy = ((0x02 & i) >> 1) * tilesize;
         DEBUG("tiles[%d].x: %d, y: %d\r\n", i, tileposx, tileposy);
-        if (hTiles[i]->data != NULL && hTiles[i]->alpha != NULL) {
+        if (hTiles[i]->dstile != NULL) {
             eErr = write_quadtree_tile_to_raster(dsquery, tileposx, tileposy, tilesize, tilesize, 
                                                  hTiles[i]->dstile);
 /*
@@ -553,7 +552,8 @@ static ERL_NIF_TERM gdal_nifs_generate_overview_tile(ErlNifEnv* env, int argc, c
             }
         }
         else {
-            DEBUG("data & alpha is NULL\r\n");
+            DEBUG("hTiles[%d].dstile SHOULD NOT be NULL\r\n", i);
+            return enif_make_badarg(env);
         }
     }
 
