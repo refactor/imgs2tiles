@@ -127,8 +127,9 @@ static ERL_NIF_TERM gdal_nifs_close_img(ErlNifEnv* env, int argc, const ERL_NIF_
 static ERL_NIF_TERM gdal_nifs_calc_nodatavalue(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
 static ERL_NIF_TERM gdal_nifs_calc_srs(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
 static ERL_NIF_TERM gdal_nifs_warp_dataset(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
-static ERL_NIF_TERM gdal_nifs_calc_data_bandscount(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) ;
+static ERL_NIF_TERM gdal_nifs_calc_data_bandscount(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
 static ERL_NIF_TERM gdal_nifs_copyout_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
+static ERL_NIF_TERM gdal_nifs_generate_overview_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
 static ERL_NIF_TERM gdal_nifs_build_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
 static ERL_NIF_TERM gdal_nifs_save_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
 static ERL_NIF_TERM gdal_nifs_get_meta(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
@@ -150,6 +151,7 @@ static ErlNifFunc nif_funcs[] =
     {"copyout_tile", 3, gdal_nifs_copyout_tile},
     {"build_tile", 1, gdal_nifs_build_tile},
     {"save_tile", 2, gdal_nifs_save_tile},
+    {"generate_overview_tile", 4, gdal_nifs_generate_overview_tile},
 
     {"get_meta", 1, gdal_nifs_get_meta}
 };
@@ -488,6 +490,99 @@ static ERL_NIF_TERM gdal_nifs_build_tile(ErlNifEnv* env, int argc, const ERL_NIF
 //    free_temp_data(hTile);  DO NOT free, it wiil be reused when generate overview tile.
 
     return ATOM_OK;
+}
+
+static ERL_NIF_TERM gdal_nifs_generate_overview_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    gdal_tile_handle* hTiles[4];
+    if (!enif_get_resource(env, argv[0], gdal_tile_RESOURCE, (void**)&hTiles[0])) {
+        return enif_make_badarg(env);
+    }
+    
+    if (!enif_get_resource(env, argv[1], gdal_tile_RESOURCE, (void**)&hTiles[1])) {
+        return enif_make_badarg(env);
+    }
+    
+    if (!enif_get_resource(env, argv[2], gdal_tile_RESOURCE, (void**)&hTiles[2])) {
+        return enif_make_badarg(env);
+    }
+    
+    if (!enif_get_resource(env, argv[3], gdal_tile_RESOURCE, (void**)&hTiles[3])) {
+        return enif_make_badarg(env);
+    }
+    
+    const int tilesize = 256; //hTiles[0]->tilesize;
+    const int tilebands = hTiles[0]->tilebands;
+    const int querysize = 512; //hTiles[0]->querysize;
+    const int dataBandsCount = hTiles[0]->dataBandsCount;
+    const char* const options_resampling = hTiles[0]->options_resampling;
+    LOG("tilesize: %d, tilebands: %d, querysize: %d, dataBandsCount: %d", tilesize, tilebands, querysize, dataBandsCount);
+
+    gdal_priv_data* priv_data = (gdal_priv_data*) enif_priv_data(env);   
+    GDALDriverH  hMemDriver = priv_data->hMemDriver;
+    
+    
+    CPLErr eErr = CE_None;
+    CPLErrorReset();
+    // Big ReadRaster query in memory scaled to the tilesize - all but 'near' algo
+    LOG("create dsquery MEM dataset");
+    GDALDatasetH dsquery = GDALCreate(hMemDriver, "", 
+                                      2*tilesize, 2*tilesize, tilebands,
+                                      GDT_Byte, NULL);
+    if (eErr == CE_Failure) {
+        LOG("failed to create dsquery MEM dataset");
+        return enif_make_badarg(env);
+    }
+
+    int tileposx = 0, tileposy = 0;
+    for (int i = 0; i < 4; ++i) {
+        tileposx = (0x01 & i) * tilesize;
+        tileposy = ((0x02 & i) >> 1) * tilesize;
+        LOG("tiles[%d].x: %d, y: %d", i, tileposx, tileposy);
+        if (hTiles[i]->data != NULL && hTiles[i]->alpha != NULL) {
+            eErr = write_quadtree_tile_to_raster(dsquery, tileposx, tileposy, tilesize, tilesize, 
+                                                 hTiles[i]->dstile);
+/*
+            eErr = write_data_and_alpha_to_raster(dsquery, tileposx, tileposy, tilesize, tilesize, 
+                                                  hTiles[i]->data, hTiles[i]->alpha,
+                                                  hTiles[i]->dataBandsCount, hTiles[i]->tilebands);
+// */
+            if (eErr == CE_Failure) {
+                LOG("failed to create dsquery MEM dataset");
+                return enif_make_badarg(env);
+            }
+        }
+        else {
+            LOG("data & alpha is NULL");
+        }
+    }
+
+    GDALDatasetH dstile = GDALCreate(hMemDriver, "", 
+                                     tilesize, tilesize, tilebands,
+                                     GDT_Byte, NULL);
+    eErr = scale_query_to_tile(dsquery, dstile, hTiles[0]->options_resampling);
+    if (eErr == CE_Failure) {
+        LOG("scale_query_to_tile failed: %s", CPLGetLastErrorMsg());
+        return enif_make_badarg(env);
+    }
+
+    gdal_tile_handle* hTile = enif_alloc_resource(gdal_tile_RESOURCE, sizeof(*hTile));
+    *hTile = (gdal_tile_handle) {
+        .dstile = dstile,
+        .data = NULL,
+        .alpha = NULL,
+ //       .w = w,
+        .querysize = querysize,
+        .tilesize = tilesize,
+        .dataBandsCount = dataBandsCount,
+        .tilebands = tilebands,
+        .options_resampling = options_resampling
+    };
+
+    ERL_NIF_TERM res = enif_make_resource(env, hTile);
+    enif_release_resource(hTile);  // hTile resource now only owned by "Erlang"
+
+    return enif_make_tuple2(env, ATOM_OK, res);
 }
 
 static ERL_NIF_TERM gdal_nifs_save_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])

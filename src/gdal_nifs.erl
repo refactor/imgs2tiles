@@ -44,6 +44,7 @@
 -export([calc_zoomlevel_range/1, 
          copyout_tile/3,
          build_tile/1,
+         generate_overview_tile/4,
          save_tile/2,
          calc_swne/1, 
          calc_tminmax/1]).
@@ -216,6 +217,9 @@ calc_data_bandscount(_Ref) ->
 
 -spec copyout_tile(img(), bandregion(), bandregion()) -> {ok, tile()} | {error, string()}.
 copyout_tile(_Img, _R, _W) ->
+    erlang:nif_error(nif_not_loaded).
+
+generate_overview_tile(_Tile0, _Tile1, _Tile2, _Tile3) ->
     erlang:nif_error(nif_not_loaded).
 
 -spec build_tile(Tile::tile()) -> ok.

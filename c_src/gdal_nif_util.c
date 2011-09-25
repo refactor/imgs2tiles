@@ -1,13 +1,6 @@
 #include "gdal_nif_util.h"
 
-void fill_pband_list(int n, int band_list[n])
-{
-    for (int i = 0; i < n; ++i) {
-        band_list[i] = i + 1;
-    }
-}
-
-GDALResampleAlg parse_resampling(const char* option_resampling) 
+static GDALResampleAlg parse_resampling(const char* option_resampling) 
 {
     if (option_resampling != NULL) {
         if (strcmp("near", option_resampling) == 0) {
@@ -35,24 +28,56 @@ GDALResampleAlg parse_resampling(const char* option_resampling)
     }
 }
 
+void fill_pband_list(int n, int band_list[n])
+{
+    for (int i = 0; i < n; ++i) {
+        band_list[i] = i + 1;
+    }
+}
+
+CPLErr write_quadtree_tile_to_raster(GDALDatasetH dsquery, 
+                                     int xoffset, int yoffset, int xsize, int ysize, 
+                                     GDALDatasetH dstile)
+{
+    LOG("quadtree tile WriteRaster");
+    int tilexsize = GDALGetRasterXSize(dstile);
+    int tileysize = GDALGetRasterYSize(dstile);
+    int tilebands = GDALGetRasterCount(dstile);
+    
+    int band_list[tilebands];
+    fill_pband_list(tilebands, band_list);
+
+    GByte *data = CPLCalloc(xsize * ysize * tilebands, sizeof(*data));
+    GDALDatasetRasterIO(dstile, GF_Read, 0, 0, tilexsize, tileysize, 
+                        data, xsize, ysize, GDT_Byte, 
+                        tilebands, band_list,
+                        0, 0, 0);
+    CPLErr eErr = GDALDatasetRasterIO(dsquery, GF_Write,
+                                      xoffset, yoffset, xsize, ysize, data, 
+                                      xsize, ysize, GDT_Byte, 
+                                      tilebands, band_list,
+                                      0, 0, 0);
+    return eErr;
+}
+
 CPLErr write_data_and_alpha_to_raster(GDALDatasetH dsquery, 
                                       int xoffset, int yoffset, int xsize, int ysize, 
                                       GByte* data, GByte* alpha, 
                                       int dataBandsCount, int tilebands) 
 {
     LOG("data and alpha WriteRaster");
-    CPLErrorReset();
 
     int band_list[dataBandsCount];
     fill_pband_list(dataBandsCount, band_list);
 
+    CPLErrorReset();
     CPLErr eErr = GDALDatasetRasterIO(dsquery, GF_Write,
                                       xoffset, yoffset, xsize, ysize, data, 
                                       xsize, ysize, GDT_Byte, 
                                       dataBandsCount, band_list,
                                       0, 0, 0);
     if (eErr == CE_Failure) {
-        LOG("data WriteRaster(wx: %d, wy: %d, wxsize: %d, wysize: %d, data: %p) for dsquery failed: %s", 
+        LOG("data WriteRaster(xoffset: %d, yoffset: %d, xsize: %d, ysize: %d, data: %p) for dsquery failed: %s", 
                 xoffset, yoffset, xsize, ysize, data,
                 CPLGetLastErrorMsg());
 
