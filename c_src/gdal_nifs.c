@@ -240,7 +240,7 @@ static ERL_NIF_TERM gdal_nifs_open_img(ErlNifEnv* env, int argc, const ERL_NIF_T
 
 static ERL_NIF_TERM gdal_nifs_calc_nodatavalue(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    LOG("gdal_nifs_calc_nodatavalue is calling");
+    DEBUG("gdal_nifs_calc_nodatavalue is calling\r\n");
     gdal_img_handle* handle;
     if (enif_get_resource(env, argv[0], gdal_img_RESOURCE, (void**)&handle)) {
         // Get NODATA value
@@ -264,7 +264,7 @@ static ERL_NIF_TERM gdal_nifs_calc_nodatavalue(ErlNifEnv* env, int argc, const E
         }
         handle->inNodata = ndv;
 
-        LOG("NODATA: count=%d", count);
+        DEBUG("NODATA: count=%d\r\n", count);
         return ATOM_OK;
     }
     else {
@@ -274,7 +274,7 @@ static ERL_NIF_TERM gdal_nifs_calc_nodatavalue(ErlNifEnv* env, int argc, const E
 
 static ERL_NIF_TERM gdal_nifs_warp_dataset(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    LOG("gdal_nifs_warp_dataset is calling");
+    DEBUG("gdal_nifs_warp_dataset is calling\r\n");
     gdal_img_handle* handle;
     if (enif_get_resource(env, argv[0], gdal_img_RESOURCE, (void**)&handle)) {
         GDALDatasetH out_ds = GDALAutoCreateWarpedVRT(handle->in_ds, 
@@ -316,7 +316,7 @@ static ERL_NIF_TERM gdal_nifs_warp_dataset(ErlNifEnv* env, int argc, const ERL_N
 
 static ERL_NIF_TERM gdal_nifs_calc_srs(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    LOG("gdal_nifs_calc_srs is calling");
+    DEBUG("gdal_nifs_calc_srs is calling\r\n");
     gdal_img_handle* handle;
     if (enif_get_resource(env, argv[0], gdal_img_RESOURCE, (void**)&handle)) {
         const char* in_srs_wkt = GDALGetProjectionRef(handle->in_ds);
@@ -348,7 +348,7 @@ static ERL_NIF_TERM gdal_nifs_calc_srs(ErlNifEnv* env, int argc, const ERL_NIF_T
 
 static ERL_NIF_TERM gdal_nifs_calc_data_bandscount(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) 
 {
-    LOG(" is calling");
+    DEBUG(" is calling\r\n");
     gdal_img_handle* handle;
 
     if (enif_get_resource(env, argv[0], gdal_img_RESOURCE, (void**)&handle)) {
@@ -382,7 +382,7 @@ static int get_bandregion_from(ErlNifEnv* env, const ERL_NIF_TERM *pterm, bandre
         enif_get_int(env, r[1], &(pbr->yoffset));
         enif_get_int(env, r[2], &(pbr->xsize));
         enif_get_int(env, r[3], &(pbr->ysize));
-        //LOG("rx=%d, ry=%d, rxsize=%d, rysize=%d", rx, ry, rxsize, rysize);
+        //DEBUG("rx=%d, ry=%d, rxsize=%d, rysize=%d\r\n", rx, ry, rxsize, rysize);
     }
     return res;
 }
@@ -402,7 +402,7 @@ static void free_temp_data(gdal_tile_handle* hTile)
 
 static void free_tile(gdal_tile_handle* hTile) 
 {
-    LOG("free and close resource");
+    DEBUG("free and close resource\r\n");
     if (hTile && hTile->dstile != NULL) {
         GDALClose(hTile->dstile);
         hTile->dstile = NULL;
@@ -428,7 +428,7 @@ static ERL_NIF_TERM gdal_nifs_build_tile(ErlNifEnv* env, int argc, const ERL_NIF
 
     CPLErr eErr = CE_None;
     if (hTile->tilesize == hTile->querysize) {
-        LOG("tilesize(%d) == querysize(%d)", hTile->tilesize, hTile->querysize);
+        DEBUG("tilesize(%d) == querysize(%d)\r\n", hTile->tilesize, hTile->querysize);
         //GDALDataType ntype = GDALGetRasterDataType( GDALGetRasterBand( dstile, GDALGetRasterCount(dstile) - 1 ) );
         // Use the ReadRaster result directly in tiles ('nearest neighbour' query)
         int xoffset = w.xoffset;
@@ -439,7 +439,7 @@ static ERL_NIF_TERM gdal_nifs_build_tile(ErlNifEnv* env, int argc, const ERL_NIF
         int tilebands = hTile->tilebands;
         eErr = write_data_and_alpha_to_raster(dstile, xoffset, yoffset, xsize, ysize, data, alpha, dataBandsCount, tilebands);
         if (eErr == CE_Failure) {
-            LOG("data or alpha WriteRaster failed: %s", CPLGetLastErrorMsg());
+            DEBUG("data or alpha WriteRaster failed: %s\r\n", CPLGetLastErrorMsg());
             return enif_make_badarg(env);
         }
 
@@ -448,16 +448,16 @@ static ERL_NIF_TERM gdal_nifs_build_tile(ErlNifEnv* env, int argc, const ERL_NIF
         // TODO: Use directly 'near' for WaveLet files
     }
     else {
-        LOG("tilesize(%d) != querysize(%d)", hTile->tilesize, hTile->querysize);
+        DEBUG("tilesize(%d) != querysize(%d)\r\n", hTile->tilesize, hTile->querysize);
 
         CPLErrorReset();
         // Big ReadRaster query in memory scaled to the tilesize - all but 'near' algo
-        LOG("create dsquery MEM dataset");
+        DEBUG("create dsquery MEM dataset\r\n");
         GDALDatasetH dsquery = GDALCreate(hMemDriver, "", 
                                           hTile->querysize, hTile->querysize, hTile->tilebands, 
                                           GDT_Byte, NULL);
         if (eErr == CE_Failure) {
-            LOG("failed to create dsquery MEM dataset");
+            DEBUG("failed to create dsquery MEM dataset\r\n");
             return enif_make_badarg(env);
         }
 
@@ -469,7 +469,7 @@ static ERL_NIF_TERM gdal_nifs_build_tile(ErlNifEnv* env, int argc, const ERL_NIF
         int tilebands = hTile->tilebands;
         eErr = write_data_and_alpha_to_raster(dsquery, xoffset, yoffset, xsize, ysize, data, alpha, dataBandsCount, tilebands);
         if (eErr == CE_Failure) {
-            LOG("data or alpha WriteRaster(wx: %d, wy: %d, wxsize: %d, wysize: %d, data: %p) for dsquery failed: %s", 
+            DEBUG("data or alpha WriteRaster(wx: %d, wy: %d, wxsize: %d, wysize: %d, data: %p) for dsquery failed: %s\r\n", 
                     w.xoffset, w.yoffset, w.xsize, w.ysize, data,
                     CPLGetLastErrorMsg());
 
@@ -482,12 +482,12 @@ static ERL_NIF_TERM gdal_nifs_build_tile(ErlNifEnv* env, int argc, const ERL_NIF
         GDALClose(dsquery);
 
         if (eErr == CE_Failure) {
-            LOG("scale_query_to_tile failed: %s", CPLGetLastErrorMsg());
+            DEBUG("scale_query_to_tile failed: %s\r\n", CPLGetLastErrorMsg());
             return enif_make_badarg(env);
         }
     }
 
-//    free_temp_data(hTile);  DO NOT free, it wiil be reused when generate overview tile.
+    free_temp_data(hTile);  //DO NOT free, it wiil be reused when generate overview tile.
 
     return ATOM_OK;
 }
@@ -516,7 +516,7 @@ static ERL_NIF_TERM gdal_nifs_generate_overview_tile(ErlNifEnv* env, int argc, c
     const int querysize = 512; //hTiles[0]->querysize;
     const int dataBandsCount = hTiles[0]->dataBandsCount;
     const char* const options_resampling = hTiles[0]->options_resampling;
-    LOG("tilesize: %d, tilebands: %d, querysize: %d, dataBandsCount: %d", tilesize, tilebands, querysize, dataBandsCount);
+    DEBUG("tilesize: %d, tilebands: %d, querysize: %d, dataBandsCount: %d\r\n", tilesize, tilebands, querysize, dataBandsCount);
 
     gdal_priv_data* priv_data = (gdal_priv_data*) enif_priv_data(env);   
     GDALDriverH  hMemDriver = priv_data->hMemDriver;
@@ -525,12 +525,12 @@ static ERL_NIF_TERM gdal_nifs_generate_overview_tile(ErlNifEnv* env, int argc, c
     CPLErr eErr = CE_None;
     CPLErrorReset();
     // Big ReadRaster query in memory scaled to the tilesize - all but 'near' algo
-    LOG("create dsquery MEM dataset");
+    DEBUG("create dsquery MEM dataset\r\n");
     GDALDatasetH dsquery = GDALCreate(hMemDriver, "", 
                                       2*tilesize, 2*tilesize, tilebands,
                                       GDT_Byte, NULL);
     if (eErr == CE_Failure) {
-        LOG("failed to create dsquery MEM dataset");
+        DEBUG("failed to create dsquery MEM dataset\r\n");
         return enif_make_badarg(env);
     }
 
@@ -538,7 +538,7 @@ static ERL_NIF_TERM gdal_nifs_generate_overview_tile(ErlNifEnv* env, int argc, c
     for (int i = 0; i < 4; ++i) {
         tileposx = (0x01 & i) * tilesize;
         tileposy = ((0x02 & i) >> 1) * tilesize;
-        LOG("tiles[%d].x: %d, y: %d", i, tileposx, tileposy);
+        DEBUG("tiles[%d].x: %d, y: %d\r\n", i, tileposx, tileposy);
         if (hTiles[i]->data != NULL && hTiles[i]->alpha != NULL) {
             eErr = write_quadtree_tile_to_raster(dsquery, tileposx, tileposy, tilesize, tilesize, 
                                                  hTiles[i]->dstile);
@@ -548,12 +548,12 @@ static ERL_NIF_TERM gdal_nifs_generate_overview_tile(ErlNifEnv* env, int argc, c
                                                   hTiles[i]->dataBandsCount, hTiles[i]->tilebands);
 // */
             if (eErr == CE_Failure) {
-                LOG("failed to create dsquery MEM dataset");
+                DEBUG("failed to create dsquery MEM dataset\r\n");
                 return enif_make_badarg(env);
             }
         }
         else {
-            LOG("data & alpha is NULL");
+            DEBUG("data & alpha is NULL\r\n");
         }
     }
 
@@ -562,7 +562,7 @@ static ERL_NIF_TERM gdal_nifs_generate_overview_tile(ErlNifEnv* env, int argc, c
                                      GDT_Byte, NULL);
     eErr = scale_query_to_tile(dsquery, dstile, hTiles[0]->options_resampling);
     if (eErr == CE_Failure) {
-        LOG("scale_query_to_tile failed: %s", CPLGetLastErrorMsg());
+        DEBUG("scale_query_to_tile failed: %s\r\n", CPLGetLastErrorMsg());
         return enif_make_badarg(env);
     }
 
@@ -587,7 +587,7 @@ static ERL_NIF_TERM gdal_nifs_generate_overview_tile(ErlNifEnv* env, int argc, c
 
 static ERL_NIF_TERM gdal_nifs_save_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    LOG("Write a copy of tile to png/jpg");
+    DEBUG("Write a copy of tile to png/jpg\r\n");
 
     gdal_tile_handle* ti;
     if (!enif_get_resource(env, argv[0], gdal_tile_RESOURCE, (void**)&ti)) {
@@ -614,7 +614,7 @@ static ERL_NIF_TERM gdal_nifs_save_tile(ErlNifEnv* env, int argc, const ERL_NIF_
 
 static ERL_NIF_TERM gdal_nifs_copyout_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    LOG("is calling, arity = %d", argc);
+    DEBUG("is calling, arity = %d\r\n", argc);
 
     gdal_priv_data* priv_data = (gdal_priv_data*) enif_priv_data(env);   
     GDALDriverH  hMemDriver = priv_data->hMemDriver;
@@ -649,7 +649,7 @@ static ERL_NIF_TERM gdal_nifs_copyout_tile(ErlNifEnv* env, int argc, const ERL_N
     ERL_NIF_TERM res = enif_make_resource(env, hTile);
     enif_release_resource(hTile);  // hTile resource now only owned by "Erlang"
 
-    LOG("Tile dataset in memory");
+    DEBUG("Tile dataset in memory\r\n");
     CPLErrorReset();
     hTile->dstile = GDALCreate(hMemDriver, "",
                                hImg->tilesize, hImg->tilesize, hImg->tilebands, 
@@ -673,7 +673,7 @@ static ERL_NIF_TERM gdal_nifs_copyout_tile(ErlNifEnv* env, int argc, const ERL_N
         strncat(buf, errmsg, strlen(errmsg));
         return enif_make_tuple2(env, ATOM_ERROR, enif_make_string(env, buf, ERL_NIF_LATIN1));
     }
-    LOG("ds.ReadRaster");
+    DEBUG("ds.ReadRaster\r\n");
 
     hTile->alpha = (GByte*)CPLCalloc(w.xsize * w.ysize, sizeof(GByte));
 
@@ -690,7 +690,7 @@ static ERL_NIF_TERM gdal_nifs_copyout_tile(ErlNifEnv* env, int argc, const ERL_N
         strncat(buf, errmsg, strlen(errmsg));
         return enif_make_tuple2(env, ATOM_ERROR, enif_make_string(env, buf, ERL_NIF_LATIN1));
     }
-    LOG("self.alphaband.ReadRaster");
+    DEBUG("self.alphaband.ReadRaster\r\n");
 
     // build_tile(hImg, hTile, hOutDriver, hMemDriver);
 
@@ -699,7 +699,7 @@ static ERL_NIF_TERM gdal_nifs_copyout_tile(ErlNifEnv* env, int argc, const ERL_N
 
 static ERL_NIF_TERM gdal_nifs_get_meta(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    LOG("gdal_nifs_get_meta is calling");
+    DEBUG("gdal_nifs_get_meta is calling\r\n");
     gdal_img_handle* handle;
 
     if (enif_get_resource(env, argv[0], gdal_img_RESOURCE, (void**)&handle)) {
@@ -758,9 +758,9 @@ static ERL_NIF_TERM gdal_nifs_get_meta(ErlNifEnv* env, int argc, const ERL_NIF_T
                 int fileIdx = 0;
                 char** files = fileList;
 
-                LOG("start.... count=%d", CSLCount(fileList));
+                DEBUG("start.... count=%d\r\n", CSLCount(fileList));
                 do {
-                    LOG("file: %p -> %s", files, *files);
+                    DEBUG("file: %p -> %s\r\n", files, *files);
                     fileTerms[ fileIdx++ ] = enif_make_string(env, *files, ERL_NIF_LATIN1);
                 } while(*(++files)) ;
                 CSLDestroy(fileList);
@@ -795,42 +795,42 @@ static ERL_NIF_TERM gdal_nifs_close_img(ErlNifEnv* env, int argc, const ERL_NIF_
 }
 
 static void free_img(gdal_img_handle* handle) {
-    LOG("close resource for %p", handle);
+    DEBUG("close resource for %p\r\n", handle);
     if (!handle) {
         return;
     }
 
     if (handle->in_srs != NULL) {
-        LOG("destringing in_srs: %p", handle->in_srs);
+        DEBUG("destringing in_srs: %p\r\n", handle->in_srs);
         OSRDestroySpatialReference(handle->in_srs);
         handle->in_srs = NULL;
     }
     
     if (handle->out_srs != NULL) {
-        LOG("destringing out_srs: %p", handle->out_srs);
+        DEBUG("destringing out_srs: %p\r\n", handle->out_srs);
         OSRDestroySpatialReference(handle->out_srs);
         handle->out_srs = NULL;
     }
 
     if (handle->in_ds != NULL) {
-        LOG("close in_ds: %p", handle->in_ds);
+        DEBUG("close in_ds: %p\r\n", handle->in_ds);
         GDALClose(handle->in_ds);
         handle->in_ds = NULL;
     }
 
     if (handle->out_ds != NULL) {
-        LOG("close out_ds: %p", handle->out_ds);
+        DEBUG("close out_ds: %p\r\n", handle->out_ds);
         GDALClose(handle->out_ds);
         handle->out_ds = NULL;
     }
 
     if (handle->inNodata != NULL) {
-        LOG("free inNodata: %p", handle->inNodata);
+        DEBUG("free inNodata: %p\r\n", handle->inNodata);
         free(handle->inNodata);
         handle->inNodata = NULL;
     }
 
-    LOG("resource closed ");
+    DEBUG("resource closed \r\n");
 }
 
 static void destroy_img_handle(gdal_img_handle* handle) {
@@ -840,14 +840,14 @@ static void destroy_img_handle(gdal_img_handle* handle) {
 
 static void gdal_nifs_img_resource_cleanup(ErlNifEnv* env, void* arg)
 {
-    LOG("datasets resource cleaning for %p", arg);
+    DEBUG("datasets resource cleaning for %p\r\n", arg);
     gdal_img_handle* handle = (gdal_img_handle*)arg;
     free_img(handle);
 }
 
 static void gdal_nifs_tile_resource_cleanup(ErlNifEnv* env, void* arg)
 {
-    LOG("Tile resource cleaning for %p", arg);
+    DEBUG("Tile resource cleaning for %p\r\n", arg);
     gdal_tile_handle* ti = (gdal_tile_handle*)arg;
     free_tile(ti);
 }
@@ -876,10 +876,10 @@ static int on_load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info)
     *priv_data = priv;
 
     if (priv->hOutDriver == NULL) {
-        LOG("The '%s' driver was not found, is it available in this GDAL build?", priv->tiledriver);
+        DEBUG("The '%s' driver was not found, is it available in this GDAL build?\r\n", priv->tiledriver);
     }
     if (priv->hMemDriver == NULL) {
-        LOG("The 'MEM' driver was not found, is it available in this GDAL build?");
+        DEBUG("The 'MEM' driver was not found, is it available in this GDAL build?\r\n");
     }
 
     // Initialize atoms that we use throughout the NIF.

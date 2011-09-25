@@ -8,5 +8,5 @@
                   stdlib
                  ]},
   {mod, { imgs2tiles_app, []}},
-  {env, [{default_tiles_dir, "/tmp"}, {default_tilefile_ext, "png"}]}
+  {env, [{default_tiles_dir, "/tmp/tiles"}, {default_tilefile_ext, "png"}]}
  ]}.
