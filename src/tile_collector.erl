@@ -38,6 +38,7 @@
         reduce_tile/1,
         discard_tiles/1,
         get_tiles/0,
+        clean_tiles/0,
         get_count/0
         ]).
 
@@ -69,6 +70,8 @@ get_count() ->
 get_tiles() ->
     gen_server:call(?SERVER, get_tiles).
 
+clean_tiles() ->
+    gen_server:call(?SERVER, clean_tiles).
 %% ------------------------------------------------------------------
 %% gen_server Function Definitions
 %% ------------------------------------------------------------------
@@ -77,6 +80,8 @@ init(Args) ->
     io:format("~p init args: ~p~n", [?MODULE, Args]),
     {ok, #state{ tile_dict = dict:new() }}.
 
+handle_call(clean_tiles, _From, State) ->
+    {reply, dict:to_list(State#state.tile_dict), #state{ tile_dict = dict:new() }};
 handle_call(get_tiles, _From, State) ->
     {reply, dict:to_list(State#state.tile_dict), State};
 handle_call(get_count, _From, State) ->

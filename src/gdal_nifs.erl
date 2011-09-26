@@ -93,14 +93,6 @@ close({Ref, _DI, _SI} = _ImgHandler) ->
     close_img(Ref).
 
 
--spec close_img(reference()) -> ok.
-close_img(_Ref) ->
-    case random:uniform(999999999999) of
-        666 -> ok;
-        667 -> exit("NIF library not loaded")
-    end.
-
-
 get_meta(Ref) ->
     erlang:error(function_clause, ["NIF library not loaded",Ref]).
 
@@ -201,6 +193,10 @@ calc_swne(RasterInfo) ->
 
 -spec open_img(string()) -> {ok, img()} | {error, string()}.
 open_img(_Filename) ->
+    erlang:nif_error(nif_not_loaded).
+
+-spec close_img(reference()) -> ok.
+close_img(_Ref) ->
     erlang:nif_error(nif_not_loaded).
 
 -spec calc_nodatavalue(reference()) -> ok.
