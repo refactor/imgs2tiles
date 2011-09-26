@@ -36,7 +36,6 @@
 
 -export([
         reduce_tile/1,
-        discard_tiles/1,
         get_tiles/0,
         clean_tiles/0,
         get_count/0
@@ -60,9 +59,6 @@ start_link() ->
 
 reduce_tile(TileInfo) ->
     gen_server:cast(?SERVER, {reduce_tile, TileInfo}).
-
-discard_tiles(ParentQuadtree) ->
-    gen_server:cast(?SERVER, {discard_tiles, ParentQuadtree}).
 
 get_count() ->
     gen_server:call(?SERVER, get_count).
@@ -95,16 +91,17 @@ handle_cast({discard_tiles, ParentQuadtree}, State) ->
 handle_cast({reduce_tile, {_Tile, Tx, Ty, Tz} = TileInfo}, State) ->
     io:format("reduce_tile Tx: ~p, Ty: ~p, Tz:~p -> by ~p~n", [Tx, Ty, Tz, self()]),
     {ParentQuadtree, ChildPosition} = mercator_tiles:parent_quadtree(Tx, Ty, Tz),
-    NewTileDict = dict:update(ParentQuadtree, 
-                              fun(ExistsTileList) -> [{ChildPosition, TileInfo} | ExistsTileList] end, 
-                              [{ChildPosition, TileInfo}], 
-                              State#state.tile_dict),
-    TileList = dict:fetch(ParentQuadtree, NewTileDict),
+    TempTileDict = dict:update(ParentQuadtree, 
+                      fun(ExistsTileList) -> [{ChildPosition, TileInfo} | ExistsTileList] end, 
+                      [{ChildPosition, TileInfo}], 
+                      State#state.tile_dict),
+    TileList = dict:fetch(ParentQuadtree, TempTileDict),
     if
         length(TileList) =:= 4 ->
-            overview_tile_builder:generate(ParentQuadtree, TileList);
+            overview_tile_builder:generate(ParentQuadtree, [{ChildPosition, TileInfo}|TileList]),
+            NewTileDict = dict:erase(ParentQuadtree, TempTileDict);
         true ->
-            ok
+            NewTileDict = TempTileDict
     end,
     {noreply, #state{ tile_dict = NewTileDict }};
 handle_cast(_Msg, State) ->

@@ -785,6 +785,7 @@ static ERL_NIF_TERM gdal_nifs_get_meta(ErlNifEnv* env, int argc, const ERL_NIF_T
 
 static ERL_NIF_TERM gdal_nifs_close_img(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
+    DEBUG("CLOSE img\r\n");
     gdal_img_handle* handle = NULL;
 
     if (enif_get_resource(env, argv[0], gdal_img_RESOURCE, (void**)&handle)) {
@@ -797,7 +798,7 @@ static ERL_NIF_TERM gdal_nifs_close_img(ErlNifEnv* env, int argc, const ERL_NIF_
 }
 
 static void free_img(gdal_img_handle* handle) {
-    DEBUG("FREE img resource for\r\n");
+    DEBUG("FREE img resource for %p\r\n", handle);
     if (handle == NULL) {
         return;
     }

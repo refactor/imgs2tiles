@@ -47,8 +47,6 @@ handle_cast({generate, ParentQuadtree, TileList}, State) ->
     TileInfo = {Tile, Tx div 2, Ty div 2, Z - 1},
     tile_saver:save(TileInfo),
     tile_collector:reduce_tile(TileInfo),
-
-    tile_collector:discard_tiles(ParentQuadtree),
     {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
