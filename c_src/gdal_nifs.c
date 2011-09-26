@@ -487,7 +487,7 @@ static ERL_NIF_TERM gdal_nifs_build_tile(ErlNifEnv* env, int argc, const ERL_NIF
         }
     }
 
-    free_temp_data(hTile);  //DO NOT free, it wiil be reused when generate overview tile.
+    free_temp_data(hTile);
 
     return ATOM_OK;
 }

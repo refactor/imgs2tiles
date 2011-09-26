@@ -54,6 +54,7 @@ CPLErr write_quadtree_tile_to_raster(GDALDatasetH dsquery,
                                       0, 0, 0);
     if (eErr != CE_None) {
         DEBUG("ReadRaster failed: %s", CPLGetLastErrorMsg());
+        CPLFree(data);
         return eErr;
     }
     eErr = GDALDatasetRasterIO(dsquery, GF_Write,
@@ -61,6 +62,7 @@ CPLErr write_quadtree_tile_to_raster(GDALDatasetH dsquery,
                                       xsize, ysize, GDT_Byte, 
                                       tilebands, band_list,
                                       0, 0, 0);
+    CPLFree(data);
     return eErr;
 }
 
