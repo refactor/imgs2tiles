@@ -2,6 +2,9 @@
 #include "cpl_conv.h"
 #include "cpl_string.h"
 
+#include "ogr_srs_api.h"
+#include "gdalwarper.h"
+
 static void printMeta(GDALDriverH hDataset);
 static void printBand(GDALRasterBandH hBand);
 
@@ -26,8 +29,21 @@ int main(int argc, char* argv[])
     GDALRasterBandH hBand = GDALGetRasterBand(hDataset, 1);
     printBand(hBand);
 
+    const char* in_srs_wkt = GDALGetProjectionRef(hDataset);
+    OGRSpatialReferenceH out_srs = OSRNewSpatialReference(NULL);
+    OSRImportFromEPSG(out_srs, 900913);
+    char* out_srs_wkt;
+    OSRExportToWkt(out_srs, &out_srs_wkt);
+    GDALDatasetH out_ds = GDALAutoCreateWarpedVRT(hDataset,
+                                                  in_srs_wkt,
+                                                  out_srs_wkt,
+                                                  GRA_NearestNeighbour,
+                                                  0.0,
+                                                  NULL);
+
 
     GDALClose(hDataset);
+    //GDALClose(out_ds);
 
     return 0;
 }
