@@ -164,7 +164,7 @@ static ERL_NIF_TERM gdal_nifs_open_img(ErlNifEnv* env, int argc, const ERL_NIF_T
     if (enif_get_string(env, argv[0], name, sizeof(name), ERL_NIF_LATIN1)) {
         name_sz = strlen(name);
 
-        GDALDatasetH in_ds = GDALOpen(name, GA_ReadOnly);
+        GDALDatasetH in_ds = GDALOpenShared(name, GA_ReadOnly);
         if (in_ds != NULL) {
             gdal_img_handle* handle = enif_alloc_resource(
                                                     gdal_img_RESOURCE, 
