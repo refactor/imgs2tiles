@@ -36,29 +36,16 @@
 
 -export([init/0]).
 -export([open/1,
-        generate_base_tiles/1,
         close/1]).
 
 -export([get_meta/1]).
 
--export([calc_zoomlevel_range/1, 
-         copyout_tile/3,
+-export([copyout_tile/3,
          build_tile/1,
          generate_overview_tile/4,
-         save_tile/2,
-         calc_swne/1, 
-         calc_tminmax/1]).
+         save_tile/2]).
 
 -include("gdal2tiles.hrl").
-
-%% QuerySize: How big should be query window be for scaling down
-%% Later on reset according the chosen resampling algorightm
--type sizeinfo() :: {QuerySize::non_neg_integer(), TileSize::non_neg_integer()}.
-
--type img()  :: reference().
--type tile() :: reference().
-
--type imghandler() :: {img(), rasterinfo(), sizeinfo()}.
 
 -on_load(init/0).
 
@@ -95,96 +82,6 @@ close({Ref, _DI, _SI} = _ImgHandler) ->
 
 get_meta(Ref) ->
     erlang:error(function_clause, ["NIF library not loaded",Ref]).
-
-
-%% @doc Generation of the base tiles (the lowest in the pyramid) directly from the input raster
--spec generate_base_tiles(imghandler()) -> ok.
-generate_base_tiles({_Ref, RasterInfo, _SizeInfo} = ImgHandler) ->
-    %%  LOG("Generating Base Tiles:");
-    {_Tminz, Tmaxz} = calc_zoomlevel_range(ImgHandler),
-    Tminmax = calc_tminmax(RasterInfo),
-    %% Set the bounds
-    {Tminx, Tminy, Tmaxx, Tmaxy} = lists:nth(Tmaxz + 1, Tminmax),
-    _TCount = (1 + abs(Tmaxx - Tminx)) * (1 + abs(Tmaxy - Tminy)),
-
-    io:format("Tmaxy: ~p, Tminy: ~p, Tminx: ~p, Tmaxx: ~p, Tmaxz: ~p~n", [Tmaxy, Tminy, Tminx, Tmaxx, Tmaxz]),
-    generate_tiles_alone_y(Tmaxy, Tminy - 1, Tminx, Tmaxx + 1, Tmaxz, ImgHandler).
-
-
-%% ---------------------------------------------------
-%% private functions
-%% ---------------------------------------------------
--spec generate_tiles_alone_y(integer(), integer(), integer(), integer(), byte(), imghandler()) -> ok.
-generate_tiles_alone_y(Tminy, Tminy, _Tminx, _Tmaxx, _Tmaxz, _ImgHandler) ->
-    ok;
-generate_tiles_alone_y(Ty, Tminy, Tminx, Tmaxx, Tmaxz, ImgHandler) ->
-    generate_tiles_alone_x(Ty, Tminx, Tmaxx, Tmaxz, ImgHandler),
-    generate_tiles_alone_y(Ty - 1, Tminy, Tminx, Tmaxx, Tmaxz, ImgHandler).
-
-
--spec generate_tiles_alone_x(integer(), integer(), integer(), byte(), imghandler()) -> ok.
-generate_tiles_alone_x(_Ty, Tmaxx, Tmaxx, _Tmaxz, _ImgHandler) ->
-    ok;
-generate_tiles_alone_x(Ty, Tx, Tmaxx, Tmaxz, ImgHandler) ->
-    {ok, Tile} = copyout_tile_for(Ty, Tx, Tmaxz, ImgHandler),
-    tile_builder:build(Tile, {Tx, Ty, Tmaxz}),
-    generate_tiles_alone_x(Ty, Tx + 1, Tmaxx, Tmaxz, ImgHandler).
-
-
--spec copyout_tile_for(integer(), integer(), byte(), imghandler()) -> {ok, tile()} | {error, string()}.
-copyout_tile_for(Ty, Tx, Tz, {Img, RasterInfo, {QuerySize, _TileSize}} = _ImgHandler) ->
-    %% Tile bounds in EPSG:900913
-    {MinX, MinY, MaxX, MaxY} = mercator_tiles:tile_enclosure(Tx, Ty, Tz),
-    Bound = {MinX, MaxY, MaxX, MinY},
-
-    {Rb, Wb} = mercator_tiles:geo_query(RasterInfo, Bound, QuerySize),
-
-    copyout_tile(Img, Rb, Wb).
-
-
-calc_tminmax(RasterInfo) ->
-    Enclosure = get_enclosure(RasterInfo),
-    calc_tminmax(Enclosure, [], 0).
-
-
-calc_tminmax(_Enclosure, Tminmax, 32) ->
-    lists:reverse(Tminmax);
-calc_tminmax({Ominx, Ominy, Omaxx, Omaxy} = Enclosure, Tminmax, Zoom) ->
-    {Tminx, Tminy} = mercator_tiles:meters_to_tile( Ominx, Ominy, Zoom ),
-    {Tmaxx, Tmaxy} = mercator_tiles:meters_to_tile( Omaxx, Omaxy, Zoom ),
-    Z = trunc(math:pow(2, Zoom)) - 1,
-    EnclosureOfZoom = {
-        max(0, Tminx), max(0, Tminy), 
-        min(Z, Tmaxx), min(Z, Tmaxy)
-    },
-    calc_tminmax(Enclosure, [EnclosureOfZoom|Tminmax], Zoom + 1).
-
-
--spec get_enclosure(rasterinfo()) -> enclosure().
-get_enclosure(RasterInfo) ->
-    {OriginX, OriginY, PixelSizeX, PixelSizeY, RasterXSize, RasterYSize} = RasterInfo,
-    ExtX = OriginX + PixelSizeX * RasterXSize,
-    ExtY = OriginY + PixelSizeY * RasterYSize,
-    {min(OriginX, ExtX), min(OriginY, ExtY), max(OriginX, ExtX), max(OriginY, ExtY)}.
-
-    
-%% @doc Get the minimal and maximal zoom level
-%% minimal zoom level: map covers area equivalent to one tile
-%% maximal zoom level: closest possible zoom level up on the resolution of raster
--spec calc_zoomlevel_range(imghandler()) -> {byte(), byte()}.
-calc_zoomlevel_range({_Ref, RasterInfo, _SizeInfo}) ->
-    {_OriginX, _OriginY, PixelSizeX, _PixelSizeY, RasterXSize, RasterYSize} = RasterInfo,
-    Tminz = mercator_tiles:zoom_for_pixelsize( PixelSizeX * max( RasterXSize, RasterYSize) / ?TILE_SIZE ),
-    Tmaxz = mercator_tiles:zoom_for_pixelsize( PixelSizeX ),
-    {Tminz, Tmaxz}.
-
-
--spec calc_swne(RasterInfo::rasterinfo()) -> {ok, {float(), float(), float(), float()}}.
-calc_swne(RasterInfo) ->
-    {Ominx, Ominy, Omaxx, Omaxy} = get_enclosure(RasterInfo),
-    {South, West} = mercator_tiles:meters_to_latlon(Ominx, Ominy),
-    {North, East} = mercator_tiles:meters_to_latlon(Omaxx, Omaxy),
-    {ok, {max(-85.05112878, South), max(-180.0, West), min(85.05112878, North), min(180.0, East)}}.
 
 
 %% ---------------------------------------------------

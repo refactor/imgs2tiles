@@ -14,3 +14,12 @@
 
 -define(TILE_SIZE, 256).
 
+%% QuerySize: How big should be query window be for scaling down
+%% Later on reset according the chosen resampling algorightm
+-type sizeinfo() :: {QuerySize::non_neg_integer(), TileSize::non_neg_integer()}.
+
+-type img()  :: reference().
+-type tile() :: reference().
+
+-type imghandler() :: {img(), rasterinfo(), sizeinfo()}.
+
