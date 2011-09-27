@@ -41,6 +41,9 @@
         get_count/0
         ]).
 
+%% for debug
+-export([do_gc/0]).
+
 %% ------------------------------------------------------------------
 %% gen_server callbacks
 %% ------------------------------------------------------------------
@@ -68,6 +71,10 @@ get_tiles() ->
 
 clean_tiles() ->
     gen_server:call(?SERVER, clean_tiles).
+
+do_gc() ->
+    gen_server:call(?SERVER, do_gc).
+
 %% ------------------------------------------------------------------
 %% gen_server Function Definitions
 %% ------------------------------------------------------------------
@@ -76,6 +83,10 @@ init(Args) ->
     io:format("~p init args: ~p~n", [?MODULE, Args]),
     {ok, #state{ tile_dict = dict:new() }}.
 
+handle_call(do_gc, _From, State) ->
+    io:format("Forces an immediate garbage collection of the currently process(~p) of ~p~n", [self(), ?MODULE]),
+    erlang:garbage_collect(),
+    {reply, ok, State};
 handle_call(clean_tiles, _From, State) ->
     {reply, dict:to_list(State#state.tile_dict), #state{ tile_dict = dict:new() }};
 handle_call(get_tiles, _From, State) ->

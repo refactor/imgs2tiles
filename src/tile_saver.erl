@@ -34,6 +34,9 @@
 
 -export([save/1]).
 
+%% for debug
+-export([do_gc/0]).
+
 %% ------------------------------------------------------------------
 %% gen_server Function Exports
 %% ------------------------------------------------------------------
@@ -57,6 +60,9 @@ start_link() ->
 save({_Tile, _Tx, _Ty, _Tz} = TileInfo) ->
     gen_server:cast(?SERVER, {save, TileInfo}).
 
+do_gc() ->
+    gen_server:call(?SERVER, do_gc).
+
 %% ------------------------------------------------------------------
 %% gen_server Function Definitions
 %% ------------------------------------------------------------------
@@ -65,6 +71,10 @@ init([SaveState]) ->
     io:format("~p init args: ~p~n", [?MODULE, SaveState]),
     {ok, SaveState}.
 
+handle_call(do_gc, _From, State) ->
+    io:format("Forces an immediate garbage collection of the currently process(~p) of ~p~n", [self(), ?MODULE]),
+    erlang:garbage_collect(),
+    {reply, ok, State};
 handle_call(_Request, _From, State) ->
     {noreply, ok, State}.
 

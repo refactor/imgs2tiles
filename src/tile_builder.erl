@@ -40,6 +40,9 @@
         build/2
         ]).
 
+%% for debug
+-export([do_gc/0]).
+
 %% ------------------------------------------------------------------
 %% gen_server Function Exports
 %% ------------------------------------------------------------------
@@ -57,6 +60,9 @@ start_link() ->
 build(Tile, {Tx, Ty, Tz}) ->
     gen_server:cast(?SERVER, {build, Tile, {Tx, Ty, Tz}}).
 
+do_gc() ->
+    gen_server:call(?SERVER, do_gc).
+
 %% ------------------------------------------------------------------
 %% gen_server Function Definitions
 %% ------------------------------------------------------------------
@@ -64,6 +70,10 @@ build(Tile, {Tx, Ty, Tz}) ->
 init(Args) ->
     {ok, Args}.
 
+handle_call(do_gc, _From, State) ->
+    io:format("Forces an immediate garbage collection of the currently process(~p) of ~p~n", [self(), ?MODULE]),
+    erlang:garbage_collect(),
+    {reply, ok, State};
 handle_call(_Request, _From, State) ->
     {noreply, ok, State}.
 
