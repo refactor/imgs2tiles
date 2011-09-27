@@ -109,7 +109,7 @@ handle_cast({reduce_tile, {_Tile, Tx, Ty, Tz} = TileInfo}, State) ->
     TileList = dict:fetch(ParentQuadtree, TempTileDict),
     if
         length(TileList) =:= 4 ->
-            overview_tile_builder:generate(ParentQuadtree, [{ChildPosition, TileInfo}|TileList]),
+            overview_tile_builder:generate(ParentQuadtree, TileList),
             NewTileDict = dict:erase(ParentQuadtree, TempTileDict);
         true ->
             NewTileDict = TempTileDict
