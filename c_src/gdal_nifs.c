@@ -803,6 +803,12 @@ static void free_img(gdal_img_handle* handle) {
         return;
     }
 
+    if (handle->out_ds != NULL) {
+        DEBUG("close out_ds: %p\r\n", handle->out_ds);
+        GDALClose(handle->out_ds);
+        handle->out_ds = NULL;
+    }
+
     if (handle->in_srs != NULL) {
         OSRDestroySpatialReference(handle->in_srs);
         handle->in_srs = NULL;
@@ -819,12 +825,6 @@ static void free_img(gdal_img_handle* handle) {
         DEBUG("close in_ds: %p\r\n", handle->in_ds);
         GDALClose(handle->in_ds);
         handle->in_ds = NULL;
-    }
-
-    if (handle->out_ds != NULL) {
-        DEBUG("close out_ds: %p\r\n", handle->out_ds);
-        GDALClose(handle->out_ds);
-        handle->out_ds = NULL;
     }
 
     if (handle->inNodata != NULL) {
