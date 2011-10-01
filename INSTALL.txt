@@ -1,0 +1,7 @@
+should install geos/proj/gdal on Mac OS X like this:
+	./configure CFLAGS="-arch i386 -arch x86_64" CXXFLAGS="-arch i386 -arch x86_64" LDFLAGS="-arch i386 -arch x86_64"  --disable-dependency-tracking
+
+reference:
+[1] http://www.kyngchaos.com/macosx/build/gdal
+[2] http://www.mail-archive.com/libtool@gnu.org/msg12306.html
+
