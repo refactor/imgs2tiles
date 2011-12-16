@@ -77,6 +77,7 @@ handle_call(do_gc, _From, State) ->
 handle_call(_Request, _From, State) ->
     {noreply, ok, State}.
 
+%% actually, gen_server is a common process, so the build function here is processed sequentially
 handle_cast({build, Tile, {Tx, Ty, Tz}}, State) ->
     gdal_nifs:build_tile(Tile),
     io:format("built tile(Tx: ~p, Ty: ~p, Tz: ~p) in process: ~p~n", [Tx, Ty, Tz, self()]),
