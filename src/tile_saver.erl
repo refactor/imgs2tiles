@@ -32,7 +32,7 @@
 
 -export([start_link/0]).
 
--export([save/1]).
+-export([save/2]).
 
 %% for debug
 -export([do_gc/0]).
@@ -57,8 +57,8 @@ start_link() ->
     SaveState = #state{tiles_dir=DefaultTilesDir, tile_file_ext=DefaultTileFileExt},
     gen_server:start_link({local, ?SERVER}, ?MODULE, [SaveState], []).
 
-save({_Tile, _Tx, _Ty, _Tz} = TileInfo) ->
-    gen_server:cast(?SERVER, {save, TileInfo}).
+save({_Tile, _Tx, _Ty, _Tz} = TileInfo, ImgFileName) ->
+    gen_server:cast(?SERVER, {save, TileInfo, ImgFileName}).
 
 do_gc() ->
     gen_server:call(?SERVER, do_gc).
@@ -78,7 +78,7 @@ handle_call(do_gc, _From, State) ->
 handle_call(_Request, _From, State) ->
     {noreply, ok, State}.
 
-handle_cast({save, {Tile, Tx, Ty, Tz} = _TileInfo}, State) ->
+handle_cast({save, {Tile, Tx, Ty, Tz} = _TileInfo, ImgFileName}, State) ->
     SaveTilesToDir = State#state.tiles_dir,
     TilesFileExt = State#state.tile_file_ext,
     TileFilename = filename:join([SaveTilesToDir, 
@@ -88,6 +88,8 @@ handle_cast({save, {Tile, Tx, Ty, Tz} = _TileInfo}, State) ->
     ok = filelib:ensure_dir(TileFilename),
     io:format("saved tile(~p) by process: ~p~n", [TileFilename, self()]),
     gdal_nifs:save_tile(Tile, TileFilename),
+
+    scan_monitor:checkout_scan(ImgFileName, now()),
     {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.

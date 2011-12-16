@@ -21,7 +21,8 @@
 -type img()  :: reference().
 -type tile() :: reference().
 
--record(imghandler, { img :: img(),
+-record(imghandler, { filename :: string(), 
+                      img :: img(),
                       rasterinfo :: rasterinfo(),
                       sizeinfo :: sizeinfo()}).
 

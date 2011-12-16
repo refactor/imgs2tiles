@@ -51,6 +51,7 @@ init([]) ->
     {ok, 
         { 
             {one_for_one, 5, 10}, [
+                ?CHILD(scan_monitor, worker),
                 ?CHILD(img_scanner,  worker), 
                 ?CHILD(tile_builder, worker),
                 ?CHILD(tile_saver,   worker),

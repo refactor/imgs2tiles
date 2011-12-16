@@ -35,7 +35,7 @@
 -export([start_link/0]).
 
 -export([
-        reduce_tile/1,
+        reduce_tile/2,
         get_tiles/0,
         clean_tiles/0,
         get_count/0
@@ -60,8 +60,8 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-reduce_tile(TileInfo) ->
-    gen_server:cast(?SERVER, {reduce_tile, TileInfo}).
+reduce_tile(TileInfo, ImgFileName) ->
+    gen_server:cast(?SERVER, {reduce_tile, TileInfo, ImgFileName}).
 
 get_count() ->
     gen_server:call(?SERVER, get_count).
@@ -99,7 +99,7 @@ handle_call(_Request, _From, State) ->
 handle_cast({discard_tiles, ParentQuadtree}, State) ->
     NewTileDict = dict:erase(ParentQuadtree, State#state.tile_dict),
     {noreply, #state{ tile_dict = NewTileDict }};
-handle_cast({reduce_tile, {_Tile, Tx, Ty, Tz} = TileInfo}, State) ->
+handle_cast({reduce_tile, {_Tile, Tx, Ty, Tz} = TileInfo, ImgFileName}, State) ->
     io:format("reduce_tile Tx: ~p, Ty: ~p, Tz:~p -> by ~p~n", [Tx, Ty, Tz, self()]),
     {ParentQuadtree, ChildPosition} = mercator_tiles:parent_quadtree(Tx, Ty, Tz),
     TempTileDict = dict:update(ParentQuadtree, 
@@ -109,7 +109,7 @@ handle_cast({reduce_tile, {_Tile, Tx, Ty, Tz} = TileInfo}, State) ->
     TileList = dict:fetch(ParentQuadtree, TempTileDict),
     if
         length(TileList) =:= 4 ->
-            overview_tile_builder:generate(ParentQuadtree, TileList),
+            overview_tile_builder:generate(ParentQuadtree, TileList, ImgFileName),
             NewTileDict = dict:erase(ParentQuadtree, TempTileDict);
         true ->
             NewTileDict = TempTileDict

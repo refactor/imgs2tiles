@@ -81,6 +81,7 @@ handle_call(_Request, _From, State) ->
     {noreply, ok, State}.
 
 handle_cast({scan_img, ImgFileName}, State) ->
+    scan_monitor:begin_scan(ImgFileName, now()),
     {ok, HI} = gdal_nifs:open(ImgFileName),
     {ElapseTime, ok} = timer:tc(?MODULE, generate_base_tiles, [HI]),
     io:format("scan img time: ~p~n", [ElapseTime]),
@@ -133,7 +134,7 @@ generate_tiles_alone_x(_Ty, Tmaxx, Tmaxx, _Tmaxz, _ImgHandler) ->
     ok;
 generate_tiles_alone_x(Ty, Tx, Tmaxx, Tmaxz, ImgHandler) ->
     {ok, Tile} = copyout_tile_for(Ty, Tx, Tmaxz, ImgHandler),
-    tile_builder:build(Tile, {Tx, Ty, Tmaxz}),
+    tile_builder:build(Tile, {Tx, Ty, Tmaxz}, ImgHandler#imghandler.filename),
     generate_tiles_alone_x(Ty, Tx + 1, Tmaxx, Tmaxz, ImgHandler).
 
 

@@ -69,7 +69,8 @@ open(Filename) ->
             calc_srs(Hdataset),
             {ok, RasterInfo} = warp_dataset(Hdataset),
             _DataBandsCount = calc_data_bandscount(Hdataset),
-            ImgHandler = #imghandler{ img = Hdataset, 
+            ImgHandler = #imghandler{ filename = Filename,
+                                      img = Hdataset, 
                                       rasterinfo = RasterInfo, 
                                       sizeinfo = {4 * ?TILE_SIZE, ?TILE_SIZE}},
             {ok, ImgHandler};
