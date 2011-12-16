@@ -103,8 +103,9 @@ code_change(_OldVsn, State, _Extra) ->
 %% ------------------------------------------------------------------
 
 %% @doc Generation of the base tiles (the lowest in the pyramid) directly from the input raster
--spec generate_base_tiles(imghandler()) -> ok.
-generate_base_tiles({_Ref, RasterInfo, _SizeInfo} = ImgHandler) ->
+-spec generate_base_tiles(#imghandler{}) -> ok.
+generate_base_tiles(ImgHandler) ->
+    RasterInfo = ImgHandler#imghandler.rasterinfo,
     %%  LOG("Generating Base Tiles:");
     {_Tminz, Tmaxz} = img_util:calc_zoomlevel_range(ImgHandler),
     Tminmax = img_util:calc_tminmax(RasterInfo),
@@ -119,7 +120,7 @@ generate_base_tiles({_Ref, RasterInfo, _SizeInfo} = ImgHandler) ->
 %% ---------------------------------------------------
 %% private functions
 %% ---------------------------------------------------
--spec generate_tiles_alone_y(integer(), integer(), integer(), integer(), byte(), imghandler()) -> ok.
+-spec generate_tiles_alone_y(integer(), integer(), integer(), integer(), byte(), #imghandler{}) -> ok.
 generate_tiles_alone_y(Tminy, Tminy, _Tminx, _Tmaxx, _Tmaxz, _ImgHandler) ->
     ok;
 generate_tiles_alone_y(Ty, Tminy, Tminx, Tmaxx, Tmaxz, ImgHandler) ->
@@ -127,7 +128,7 @@ generate_tiles_alone_y(Ty, Tminy, Tminx, Tmaxx, Tmaxz, ImgHandler) ->
     generate_tiles_alone_y(Ty - 1, Tminy, Tminx, Tmaxx, Tmaxz, ImgHandler).
 
 
--spec generate_tiles_alone_x(integer(), integer(), integer(), byte(), imghandler()) -> ok.
+-spec generate_tiles_alone_x(integer(), integer(), integer(), byte(), #imghandler{}) -> ok.
 generate_tiles_alone_x(_Ty, Tmaxx, Tmaxx, _Tmaxz, _ImgHandler) ->
     ok;
 generate_tiles_alone_x(Ty, Tx, Tmaxx, Tmaxz, ImgHandler) ->
@@ -136,8 +137,12 @@ generate_tiles_alone_x(Ty, Tx, Tmaxx, Tmaxz, ImgHandler) ->
     generate_tiles_alone_x(Ty, Tx + 1, Tmaxx, Tmaxz, ImgHandler).
 
 
--spec copyout_tile_for(integer(), integer(), byte(), imghandler()) -> {ok, tile()} | {error, string()}.
-copyout_tile_for(Ty, Tx, Tz, {Img, RasterInfo, {QuerySize, _TileSize}} = _ImgHandler) ->
+-spec copyout_tile_for(integer(), integer(), byte(), #imghandler{}) -> {ok, tile()} | {error, string()}.
+copyout_tile_for(Ty, Tx, Tz,  ImgHandler) ->
+    Img = ImgHandler#imghandler.img, 
+    RasterInfo = ImgHandler#imghandler.rasterinfo,
+    {QuerySize, _TileSize} = ImgHandler#imghandler.sizeinfo,
+
     %% Tile bounds in EPSG:900913
     {MinX, MinY, MaxX, MaxY} = mercator_tiles:tile_enclosure(Tx, Ty, Tz),
     Bound = {MinX, MaxY, MaxX, MinY},

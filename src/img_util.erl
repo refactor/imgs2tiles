@@ -11,8 +11,9 @@
 %% @doc Get the minimal and maximal zoom level
 %% minimal zoom level: map covers area equivalent to one tile
 %% maximal zoom level: closest possible zoom level up on the resolution of raster
--spec calc_zoomlevel_range(imghandler()) -> {byte(), byte()}.
-calc_zoomlevel_range({_Ref, RasterInfo, _SizeInfo}) ->
+-spec calc_zoomlevel_range(#imghandler{}) -> {byte(), byte()}.
+calc_zoomlevel_range(ImgHandler) ->
+    RasterInfo = ImgHandler#imghandler.rasterinfo,
     {_OriginX, _OriginY, PixelSizeX, _PixelSizeY, RasterXSize, RasterYSize} = RasterInfo,
     Tminz = mercator_tiles:zoom_for_pixelsize( PixelSizeX * max( RasterXSize, RasterYSize) / ?TILE_SIZE ),
     Tmaxz = mercator_tiles:zoom_for_pixelsize( PixelSizeX ),

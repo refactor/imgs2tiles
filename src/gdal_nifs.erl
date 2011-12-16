@@ -61,7 +61,7 @@ init() ->
     erlang:load_nif(filename:join(PrivDir, atom_to_list(?MODULE)), 0).
 
 
--spec(open(Filename::string()) -> {ok, imghandler()} | {error, string()}).
+-spec(open(Filename::string()) -> {ok, #imghandler{}} | {error, string()}).
 open(Filename) ->
     case open_img(Filename) of
         {ok, Hdataset} = _Res->
@@ -69,15 +69,18 @@ open(Filename) ->
             calc_srs(Hdataset),
             {ok, RasterInfo} = warp_dataset(Hdataset),
             _DataBandsCount = calc_data_bandscount(Hdataset),
-            {ok, {Hdataset, RasterInfo, {4 * ?TILE_SIZE, ?TILE_SIZE}}};
+            ImgHandler = #imghandler{ img = Hdataset, 
+                                      rasterinfo = RasterInfo, 
+                                      sizeinfo = {4 * ?TILE_SIZE, ?TILE_SIZE}},
+            {ok, ImgHandler};
         {error, _} = Err ->
             Err
     end.
 
 
--spec close(imghandler()) -> ok.
-close({Ref, _DI, _SI} = _ImgHandler) ->
-    close_img(Ref).
+-spec close(#imghandler{}) -> ok.
+close(ImgHandler) ->
+    close_img(ImgHandler#imghandler.img).
 
 
 get_meta(Ref) ->
