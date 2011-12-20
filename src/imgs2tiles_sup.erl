@@ -55,7 +55,7 @@ init([]) ->
                 ?CHILD(img_scanner,  worker), 
                 ?CHILD(tile_builder, worker),
                 ?CHILD(tile_saver,   worker),
-                ?CHILD(tile_collector, worker),
+                ?CHILD(tc_sup, worker),
                 ?CHILD(overview_tile_builder, worker)
             ]
         } 

@@ -32,17 +32,19 @@
 %% API Function Exports
 %% ------------------------------------------------------------------
 
--export([start_link/0]).
+-export([start_link/2]).
 
 -export([
-        reduce_tile/2,
-        get_tiles/0,
-        clean_tiles/0,
-        get_count/0
+        create/2,
+        delete/1,
+        reduce_tile/3,
+        get_tiles/1,
+        clean_tiles/1,
+        get_count/1
         ]).
 
 %% for debug
--export([do_gc/0]).
+-export([do_gc/1]).
 
 %% ------------------------------------------------------------------
 %% gen_server callbacks
@@ -57,23 +59,29 @@
 %% API Function Definitions
 %% ------------------------------------------------------------------
 
-start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+start_link(TileInfo, ImgFileName) ->
+    gen_server:start_link(?MODULE, [TileInfo, ImgFileName], []).
 
-reduce_tile(TileInfo, ImgFileName) ->
-    gen_server:cast(?SERVER, {reduce_tile, TileInfo, ImgFileName}).
+create(TileInfo, ImgFileName) ->
+    tc_sup:start_child(TileInfo, ImgFileName).
 
-get_count() ->
-    gen_server:call(?SERVER, get_count).
+delete(Pid) ->
+    gen_server:cast(Pid, delete).
 
-get_tiles() ->
-    gen_server:call(?SERVER, get_tiles).
+reduce_tile(Pid, TileInfo, ImgFileName) ->
+    gen_server:cast(Pid, {reduce_tile, TileInfo, ImgFileName}).
 
-clean_tiles() ->
-    gen_server:call(?SERVER, clean_tiles).
+get_count(Pid) ->
+    gen_server:call(Pid, get_count).
 
-do_gc() ->
-    gen_server:call(?SERVER, do_gc).
+get_tiles(Pid) ->
+    gen_server:call(Pid, get_tiles).
+
+clean_tiles(Pid) ->
+    gen_server:call(Pid, clean_tiles).
+
+do_gc(Pid) ->
+    gen_server:call(Pid, do_gc).
 
 %% ------------------------------------------------------------------
 %% gen_server Function Definitions
@@ -102,26 +110,23 @@ handle_cast({discard_tiles, ParentQuadtree}, State) ->
 handle_cast({reduce_tile, {_Tile, Tx, Ty, Tz} = TileInfo, ImgFileName}, State) ->
     io:format("reduce_tile Tx: ~p, Ty: ~p, Tz:~p -> by ~p~n", [Tx, Ty, Tz, self()]),
     {ParentQuadtree, ChildPosition} = mercator_tiles:parent_quadtree(Tx, Ty, Tz),
-    TempTileDict = dict:update(ParentQuadtree, 
-                      fun(ExistsTileList) -> [{ChildPosition, TileInfo} | ExistsTileList] end, 
-                      [{ChildPosition, TileInfo}], 
-                      State#state.tile_dict),
-    TileList = dict:fetch(ParentQuadtree, TempTileDict),
+    NewTileDict = dict:store(ChildPosition, TileInfo, State#state.tile_dict),
+    DictSize = dict:size(NewTileDict),
     if
-        length(TileList) =:= 4 ->
-            overview_tile_builder:generate(ParentQuadtree, TileList, ImgFileName),
-            NewTileDict = dict:erase(ParentQuadtree, TempTileDict);
+        DictSize =:= 4 ->
+            overview_tile_builder:generate(ParentQuadtree, NewTileDict, ImgFileName),
+            {stop, normal, State};
         true ->
-            NewTileDict = TempTileDict
-    end,
-    {noreply, #state{ tile_dict = NewTileDict }};
-handle_cast(_Msg, State) ->
-    {noreply, State}.
+            {noreply, #state{ tile_dict = NewTileDict }}
+    end;
+handle_cast(delete, State) ->
+    {stop, normal, State}.
 
 handle_info(_Info, State) ->
     {noreply, State}.
 
 terminate(_Reason, _State) ->
+    tc_store:delete(self()),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->

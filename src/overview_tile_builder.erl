@@ -27,8 +27,8 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-generate(ParentQuadtree, TileList, ImgFileName) ->
-    gen_server:cast(?SERVER, {generate, ParentQuadtree, TileList, ImgFileName}).
+generate(ParentQuadtree, TilesDict, ImgFileName) ->
+    gen_server:cast(?SERVER, {generate, ParentQuadtree, TilesDict, ImgFileName}).
 
 do_gc() ->
     gen_server:call(?SERVER, do_gc).
@@ -47,16 +47,16 @@ handle_call(do_gc, _From, State) ->
 handle_call(_Request, _From, State) ->
     {noreply, ok, State}.
 
-handle_cast({generate, ParentQuadtree, TileList, ImgFileName}, State) ->
-    io:format("generate overview parent quadtree: ~p, ~p~n", [ParentQuadtree, TileList]),
-    {"0", {Tile0, Tx,Ty,Z}} = lists:keyfind("0", 1, TileList),
-    {"1", {Tile1, _,_,Z}} = lists:keyfind("1", 1, TileList),
-    {"2", {Tile2, _,_,Z}} = lists:keyfind("2", 1, TileList),
-    {"3", {Tile3, _,_,Z}} = lists:keyfind("3", 1, TileList),
+handle_cast({generate, ParentQuadtree, TilesDict, ImgFileName}, State) ->
+    io:format("generate overview parent quadtree: ~p, ~p~n", [ParentQuadtree, TilesDict]),
+    {Tile0, Tx,Ty,Z} = dict:fetch("0", TilesDict),    
+    {Tile1, _,_,Z} = dict:fetch("1", TilesDict),
+    {Tile2, _,_,Z} = dict:fetch("2", TilesDict),
+    {Tile3, _,_,Z} = dict:fetch("3", TilesDict),
     {ok, Tile} = gdal_nifs:generate_overview_tile(Tile0, Tile1, Tile2, Tile3),
     TileInfo = {Tile, Tx div 2, Ty div 2, Z - 1},
     tile_saver:save(TileInfo, ImgFileName),
-    tile_collector:reduce_tile(TileInfo, ImgFileName),
+    tile_collect:reduce(TileInfo, ImgFileName),
     {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
