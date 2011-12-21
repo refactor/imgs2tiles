@@ -83,7 +83,6 @@ handle_cast({build, Tile, {Tx, Ty, Tz}, ImgFileName}, State) ->
     io:format("built tile(Tx: ~p, Ty: ~p, Tz: ~p) in process: ~p~n", [Tx, Ty, Tz, self()]),
     TileInfo = {Tile, Tx, Ty, Tz},
     tile_saver:save(TileInfo, ImgFileName),
-%    tile_collector:reduce_tile(TileInfo, ImgFileName),
     tile_collect:reduce(TileInfo, ImgFileName),
     {noreply, State};
 handle_cast(_Msg, State) ->
