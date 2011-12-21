@@ -1,7 +1,7 @@
 %%% -------------------------------------------------------------------
 %%% @author wulei <mjollnir.ray@gmail.com>
 %%% @copyright 2011
-%%% @doc tile_collector: used to collect overview-tiles
+%%% @doc tc_collector: used to collect overview-tiles
 %%% @end
 %%% -------------------------------------------------------------------
 %%  Copyright (c) 2011
@@ -24,7 +24,7 @@
 %%   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 %%   DEALINGS IN THE SOFTWARE.
 %% -------------------------------------------------------------------
--module(tile_collector).
+-module(tc_collector).
 -behaviour(gen_server).
 -define(SERVER, ?MODULE).
 

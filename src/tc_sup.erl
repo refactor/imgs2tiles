@@ -16,8 +16,8 @@ start_child(TileInfo, ImgFileName) ->
 
 init([]) ->
     tc_store:init(),
-    Element = { tile_collector, {tile_collector, start_link, []},
-                temporary, brutal_kill, worker, [tile_collector]},
+    Element = { tc_collector, {tc_collector, start_link, []},
+                temporary, brutal_kill, worker, [tc_collector]},
     Children = [Element],
     RestartStrategy = {simple_one_for_one, 0, 1},
     {ok, {RestartStrategy, Children}}.

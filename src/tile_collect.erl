@@ -10,17 +10,17 @@ reduce({_Tile, Tx, Ty, Tz} = TileInfo, ImgFileName) ->
         {ok, Pid} ->
             Pid;
         {error, _} ->
-            {ok, Pid} = tile_collector:create(TileInfo, ImgFileName),
+            {ok, Pid} = tc_collector:create(TileInfo, ImgFileName),
             tc_store:insert(Key, Pid),
             Pid
     end,
-    tile_collector:reduce_tile(Pid2, TileInfo, ImgFileName).
+    tc_collector:reduce_tile(Pid2, TileInfo, ImgFileName).
 
 
 delete(Key) ->
     case tc_store:lookup(Key) of
         {ok, Pid} ->
-            tile_collector:delete(Pid);
+            tc_collector:delete(Pid);
         {error, _Reason} ->
             ok
     end.
