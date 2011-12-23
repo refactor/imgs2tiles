@@ -346,21 +346,27 @@ static ERL_NIF_TERM gdal_nifs_calc_srs(ErlNifEnv* env, int argc, const ERL_NIF_T
     }
 }
 
+GDALRasterBandH calc_bandscound(GDALDatasetH ds, int* pDataBandsCount)
+{
+    GDALRasterBandH alphaBand = GDALGetMaskBand(GDALGetRasterBand(ds, 1));
+    int rasterCount = GDALGetRasterCount(ds);
+    if (GDALGetMaskFlags(alphaBand) & GMF_ALPHA || rasterCount == 4 || rasterCount == 2) {
+        *pDataBandsCount = rasterCount - 1;
+    }
+    else {
+        *pDataBandsCount = rasterCount;
+    }
+    return alphaBand;
+}
+
 static ERL_NIF_TERM gdal_nifs_calc_data_bandscount(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) 
 {
     DEBUG(" is calling\r\n");
     gdal_img_handle* handle;
 
     if (enif_get_resource(env, argv[0], gdal_img_RESOURCE, (void**)&handle)) {
-        unsigned int dataBandsCount;
-        handle->alphaBand = GDALGetMaskBand(GDALGetRasterBand(handle->out_ds, 1));
-        int rasterCount = GDALGetRasterCount(handle->out_ds);
-        if (GDALGetMaskFlags(handle->alphaBand) & GMF_ALPHA || rasterCount == 4 || rasterCount == 2) {
-            dataBandsCount = rasterCount - 1;
-        }
-        else {
-            dataBandsCount = rasterCount;
-        }
+        int dataBandsCount;
+        handle->alphaBand  = calc_bandscound(handle->out_ds, &dataBandsCount);
 
         handle->dataBandsCount = dataBandsCount;
         handle->tilebands = dataBandsCount + 1;
