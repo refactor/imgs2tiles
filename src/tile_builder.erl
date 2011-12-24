@@ -57,8 +57,8 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-build(Tile, {Tx, Ty, Tz}, ImgFileName) ->
-    gen_server:cast(?SERVER, {build, Tile, {Tx, Ty, Tz}, ImgFileName}).
+build(TileRawdata, {Tx, Ty, Tz}, ImgFileName) ->
+    gen_server:cast(?SERVER, {build, TileRawdata, {Tx, Ty, Tz}, ImgFileName}).
 
 do_gc() ->
     gen_server:call(?SERVER, do_gc).
@@ -78,8 +78,8 @@ handle_call(_Request, _From, State) ->
     {noreply, ok, State}.
 
 %% actually, gen_server is a common process, so the build function here is processed sequentially
-handle_cast({build, Tile, {Tx, Ty, Tz}, ImgFileName}, State) ->
-    gdal_nifs:build_tile(Tile),
+handle_cast({build, TileRawdata, {Tx, Ty, Tz}, ImgFileName}, State) ->
+    {ok, Tile} = gdal_nifs:build_tile(TileRawdata),
     io:format("built tile(Tx: ~p, Ty: ~p, Tz: ~p) in process: ~p~n", [Tx, Ty, Tz, self()]),
     TileInfo = {Tile, Tx, Ty, Tz},
     tile_saver:save(TileInfo, ImgFileName),

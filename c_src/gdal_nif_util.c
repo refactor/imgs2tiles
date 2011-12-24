@@ -70,9 +70,9 @@ CPLErr write_quadtree_tile_to_raster(GDALDatasetH dsquery,
 }
 
 CPLErr write_data_and_alpha_to_raster(GDALDatasetH dsquery, 
-                                      int xoffset, int yoffset, int xsize, int ysize, 
-                                      GByte* data, GByte* alpha, 
-                                      int dataBandsCount, int tilebands) 
+                                      const int xoffset, const int yoffset, const int xsize, const int ysize, 
+                                      GByte* const data, GByte* const alpha, 
+                                      const int dataBandsCount, const int tilebands) 
 {
     DEBUG("data and alpha WriteRaster\r\n");
 

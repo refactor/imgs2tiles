@@ -133,12 +133,12 @@ generate_tiles_alone_y(Ty, Tminy, Tminx, Tmaxx, Tmaxz, ImgHandler) ->
 generate_tiles_alone_x(_Ty, Tmaxx, Tmaxx, _Tmaxz, _ImgHandler) ->
     ok;
 generate_tiles_alone_x(Ty, Tx, Tmaxx, Tmaxz, ImgHandler) ->
-    {ok, Tile} = copyout_tile_for(Ty, Tx, Tmaxz, ImgHandler),
-    tile_builder:build(Tile, {Tx, Ty, Tmaxz}, ImgHandler#imghandler.filename),
+    {ok, TileRawdata} = copyout_tile_for(Ty, Tx, Tmaxz, ImgHandler),
+    tile_builder:build(TileRawdata, {Tx, Ty, Tmaxz}, ImgHandler#imghandler.filename),
     generate_tiles_alone_x(Ty, Tx + 1, Tmaxx, Tmaxz, ImgHandler).
 
 
--spec copyout_tile_for(integer(), integer(), byte(), #imghandler{}) -> {ok, tile()} | {error, string()}.
+-spec copyout_tile_for(integer(), integer(), byte(), #imghandler{}) -> {ok, tile_rawdata()} | {error, string()}.
 copyout_tile_for(Ty, Tx, Tz,  ImgHandler) ->
     Img = ImgHandler#imghandler.img, 
     RasterInfo = ImgHandler#imghandler.rasterinfo,

@@ -50,6 +50,7 @@
 
 static ErlNifResourceType* gdal_img_RESOURCE;
 static ErlNifResourceType* gdal_tile_RESOURCE;
+static ErlNifResourceType* gdal_rawdata_RESOURCE;
 
 typedef struct
 {
@@ -95,6 +96,23 @@ typedef struct
     int ysize;
 } bandregion;
 
+// the rawdata copyout from originated img
+typedef struct
+{
+    bandregion w;
+    int querysize;
+    int tilesize;
+    
+    int dataBandsCount;
+    int tilebands;
+    
+    const char* options_resampling;
+
+    GByte* data;
+    GByte* alpha;
+} gdal_rawdata_handle;
+
+// the GDAL dataset built from rawdata
 typedef struct
 {
     GDALDatasetH dstile;
@@ -107,9 +125,6 @@ typedef struct
     int tilebands;
     
     const char* options_resampling;
-
-    GByte* data;
-    GByte* alpha;
 } gdal_tile_handle;
 
 // Atoms (initialized in on_load)
@@ -393,16 +408,15 @@ static int get_bandregion_from(ErlNifEnv* env, const ERL_NIF_TERM *pterm, bandre
     return res;
 }
 
-// free temp data & alpha binary
-static void free_temp_data(gdal_tile_handle* hTile)
+static void free_rawdata(gdal_rawdata_handle* hRawdata)
 {
-    if (hTile && hTile->data != NULL) {
-        CPLFree(hTile->data);
-        hTile->data = NULL;
+    if (hRawdata && hRawdata->data != NULL) {
+        CPLFree(hRawdata->data);
+        hRawdata->data = NULL;
     }
-    if (hTile && hTile->alpha != NULL) {
-        CPLFree(hTile->alpha);
-        hTile->alpha = NULL;
+    if (hRawdata && hRawdata->alpha != NULL) {
+        CPLFree(hRawdata->alpha);
+        hRawdata->alpha = NULL;
     }
 }
 
@@ -413,36 +427,40 @@ static void free_tile(gdal_tile_handle* hTile)
         GDALClose(hTile->dstile);
         hTile->dstile = NULL;
     }
-    
-    free_temp_data(hTile);
 }
 
 static ERL_NIF_TERM gdal_nifs_build_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    gdal_tile_handle* hTile;
-    if (!enif_get_resource(env, argv[0], gdal_tile_RESOURCE, (void**)&hTile)) {
+    gdal_rawdata_handle* hRawdata;
+    if (!enif_get_resource(env, argv[0], gdal_rawdata_RESOURCE, (void**)&hRawdata)) {
         return enif_make_badarg(env);
     }
     
     gdal_priv_data* priv_data = (gdal_priv_data*) enif_priv_data(env);   
     GDALDriverH  hMemDriver = priv_data->hMemDriver;
 
-    GDALDatasetH dstile = hTile->dstile;
-    GByte* data = hTile->data;
-    GByte* alpha = hTile->alpha;
-    bandregion w = hTile->w;
+    DEBUG("Tile dataset in memory\r\n");
+    CPLErrorReset();
+    GDALDatasetH dstile = GDALCreate( hMemDriver, "",
+                                      hRawdata->tilesize, hRawdata->tilesize, hRawdata->tilebands, 
+                                      GDT_Byte, NULL);
+
+    GByte* const data = hRawdata->data;
+    GByte* const alpha = hRawdata->alpha;
+    const bandregion w = hRawdata->w;
+
+    const int xoffset = w.xoffset;
+    const int yoffset = w.yoffset;
+    const int xsize = w.xsize;
+    const int ysize = w.ysize;
+    const int dataBandsCount = hRawdata->dataBandsCount;
+    const int tilebands = hRawdata->tilebands;
 
     CPLErr eErr = CE_None;
-    if (hTile->tilesize == hTile->querysize) {
-        DEBUG("tilesize(%d) == querysize(%d)\r\n", hTile->tilesize, hTile->querysize);
+    if (hRawdata->tilesize == hRawdata->querysize) {
+        DEBUG("tilesize(%d) == querysize(%d)\r\n", hRawdata->tilesize, hRawdata->querysize);
         //GDALDataType ntype = GDALGetRasterDataType( GDALGetRasterBand( dstile, GDALGetRasterCount(dstile) - 1 ) );
         // Use the ReadRaster result directly in tiles ('nearest neighbour' query)
-        int xoffset = w.xoffset;
-        int yoffset = w.yoffset;
-        int xsize = w.xsize;
-        int ysize = w.ysize;
-        int dataBandsCount = hTile->dataBandsCount;
-        int tilebands = hTile->tilebands;
         eErr = write_data_and_alpha_to_raster(dstile, xoffset, yoffset, xsize, ysize, data, alpha, dataBandsCount, tilebands);
         if (eErr == CE_Failure) {
             DEBUG("FAILED when data or alpha WriteRaster: %s\r\n", CPLGetLastErrorMsg());
@@ -454,24 +472,18 @@ static ERL_NIF_TERM gdal_nifs_build_tile(ErlNifEnv* env, int argc, const ERL_NIF
         // TODO: Use directly 'near' for WaveLet files
     }
     else {
-        DEBUG("tilesize(%d) != querysize(%d)\r\n", hTile->tilesize, hTile->querysize);
+        DEBUG("tilesize(%d) != querysize(%d)\r\n", hRawdata->tilesize, hRawdata->querysize);
 
         // Big ReadRaster query in memory scaled to the tilesize - all but 'near' algo
-        DEBUG("create dsquery MEM dataset, xysize: %d\r\n", hTile->querysize);
+        DEBUG("create dsquery MEM dataset, xysize: %d\r\n", hRawdata->querysize);
         GDALDatasetH dsquery = GDALCreate(hMemDriver, "", 
-                                          hTile->querysize, hTile->querysize, hTile->tilebands, 
+                                          hRawdata->querysize, hRawdata->querysize, hRawdata->tilebands, 
                                           GDT_Byte, NULL);
         if (dsquery == NULL) {
             DEBUG("failed to create dsquery MEM dataset\r\n");
             return enif_make_badarg(env);
         }
 
-        int xoffset = w.xoffset;
-        int yoffset = w.yoffset;
-        int xsize = w.xsize;
-        int ysize = w.ysize;
-        int dataBandsCount = hTile->dataBandsCount;
-        int tilebands = hTile->tilebands;
         eErr = write_data_and_alpha_to_raster(dsquery, xoffset, yoffset, xsize, ysize, data, alpha, dataBandsCount, tilebands);
         if (eErr == CE_Failure) {
             DEBUG("data or alpha WriteRaster(wx: %d, wy: %d, wxsize: %d, wysize: %d, data: %p) for dsquery failed: %s\r\n", 
@@ -483,7 +495,7 @@ static ERL_NIF_TERM gdal_nifs_build_tile(ErlNifEnv* env, int argc, const ERL_NIF
         }
 
         CPLErrorReset();
-        eErr = scale_query_to_tile(dsquery, dstile, hTile->options_resampling);
+        eErr = scale_query_to_tile(dsquery, dstile, hRawdata->options_resampling);
         GDALClose(dsquery);
 
         if (eErr == CE_Failure) {
@@ -492,9 +504,21 @@ static ERL_NIF_TERM gdal_nifs_build_tile(ErlNifEnv* env, int argc, const ERL_NIF
         }
     }
 
-    free_temp_data(hTile);
+    gdal_tile_handle* hTile = enif_alloc_resource(gdal_tile_RESOURCE, sizeof(*hTile));
+    *hTile = (gdal_tile_handle) {
+        .dstile = dstile,
+//       .w = w,
+        .querysize = hRawdata->querysize,
+        .tilesize = hRawdata->tilesize,
+        .dataBandsCount = hRawdata->dataBandsCount,
+        .tilebands = hRawdata->tilebands,
+        .options_resampling = hRawdata->options_resampling
+    };
 
-    return ATOM_OK;
+    ERL_NIF_TERM res = enif_make_resource(env, hTile);
+    enif_release_resource(hTile);  // hTile resource now only owned by "Erlang"
+
+    return enif_make_tuple2(env, ATOM_OK, res);
 }
 
 static ERL_NIF_TERM gdal_nifs_generate_overview_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
@@ -577,8 +601,6 @@ static ERL_NIF_TERM gdal_nifs_generate_overview_tile(ErlNifEnv* env, int argc, c
     gdal_tile_handle* hTile = enif_alloc_resource(gdal_tile_RESOURCE, sizeof(*hTile));
     *hTile = (gdal_tile_handle) {
         .dstile = dstile,
-        .data = NULL,
-        .alpha = NULL,
  //       .w = w,
         .querysize = querysize,
         .tilesize = tilesize,
@@ -624,9 +646,6 @@ static ERL_NIF_TERM gdal_nifs_copyout_tile(ErlNifEnv* env, int argc, const ERL_N
 {
     DEBUG("copyout a tile\r\n");
 
-    gdal_priv_data* priv_data = (gdal_priv_data*) enif_priv_data(env);   
-    GDALDriverH  hMemDriver = priv_data->hMemDriver;
-
     GDALDatasetH ds = NULL;
     gdal_img_handle* hImg = NULL;
     if (enif_get_resource(env, argv[0], gdal_img_RESOURCE, (void**)&hImg)) {
@@ -641,9 +660,8 @@ static ERL_NIF_TERM gdal_nifs_copyout_tile(ErlNifEnv* env, int argc, const ERL_N
         return enif_make_badarg(env);
     }
 
-    gdal_tile_handle* hTile = enif_alloc_resource(gdal_tile_RESOURCE, sizeof(*hTile));
-    *hTile = (gdal_tile_handle) {
-        .dstile = NULL,
+    gdal_rawdata_handle* hRawdata = enif_alloc_resource(gdal_rawdata_RESOURCE, sizeof(*hRawdata));
+    *hRawdata = (gdal_rawdata_handle) {
         .data = NULL,
         .alpha = NULL,
         .w = w,
@@ -654,28 +672,22 @@ static ERL_NIF_TERM gdal_nifs_copyout_tile(ErlNifEnv* env, int argc, const ERL_N
         .options_resampling = hImg->options_resampling
     };
 
-    ERL_NIF_TERM res = enif_make_resource(env, hTile);
-    enif_release_resource(hTile);  // hTile resource now only owned by "Erlang"
-
-    DEBUG("Tile dataset in memory\r\n");
-    CPLErrorReset();
-    hTile->dstile = GDALCreate(hMemDriver, "",
-                               hImg->tilesize, hImg->tilesize, hImg->tilebands, 
-                               GDT_Byte, NULL);
+    ERL_NIF_TERM res = enif_make_resource(env, hRawdata);
+    enif_release_resource(hRawdata);  // hRawdata resource now only owned by "Erlang"
 
     // read dataset data
-    hTile->data = (GByte*)CPLCalloc(w.xsize * w.ysize * hImg->dataBandsCount, sizeof(*hTile->data));
+    hRawdata->data = (GByte*)CPLCalloc(w.xsize * w.ysize * hImg->dataBandsCount, sizeof(*hRawdata->data));
 
     int panBandMap[hImg->dataBandsCount];
     fill_pband_list(hImg->dataBandsCount, panBandMap);
 
     CPLErrorReset();
     CPLErr eErr = GDALDatasetRasterIO(ds, GF_Read, 
-                                      r.xoffset, r.yoffset, r.xsize, r.ysize, hTile->data, 
+                                      r.xoffset, r.yoffset, r.xsize, r.ysize, hRawdata->data, 
                                       w.xsize, w.ysize, GDT_Byte, hImg->dataBandsCount, panBandMap, 
                                       0, 0, 0);
     if (eErr == CE_Failure) {
-//        free_tile(hTile);
+//        free_tile(hRawdata);
 
         char buf[128] = "DatasetRasterIO read failed: ";
         const char* errmsg = CPLGetLastErrorMsg();
@@ -685,15 +697,15 @@ static ERL_NIF_TERM gdal_nifs_copyout_tile(ErlNifEnv* env, int argc, const ERL_N
     DEBUG("ds.ReadRaster\r\n");
 
     // read dataset alpha 
-    hTile->alpha = (GByte*)CPLCalloc(w.xsize * w.ysize, sizeof(*hTile->alpha));
+    hRawdata->alpha = (GByte*)CPLCalloc(w.xsize * w.ysize, sizeof(*hRawdata->alpha));
 
     CPLErrorReset();
     eErr = GDALRasterIO(hImg->alphaBand, GF_Read, 
-                        r.xoffset, r.yoffset, r.xsize, r.ysize, hTile->alpha, w.xsize, w.ysize, 
+                        r.xoffset, r.yoffset, r.xsize, r.ysize, hRawdata->alpha, w.xsize, w.ysize, 
                         GDT_Byte, 0, 0);
 
     if (eErr == CE_Failure) {
-//        free_tile(hTile);
+//        free_rawdata(hRawdata);
 
         char buf[128] = "DatasetRasterIO read failed: ";
         const char* errmsg = CPLGetLastErrorMsg();
@@ -854,6 +866,13 @@ static void gdal_nifs_img_resource_cleanup(ErlNifEnv* env, void* arg)
     free_img(handle);
 }
 
+static void gdal_nifs_rawdata_resource_cleanup(ErlNifEnv* env, void* arg)
+{
+    DEBUG("RAW DATA cleaning\r\n");
+    gdal_rawdata_handle* handle = (gdal_rawdata_handle*)arg;
+    free_rawdata(handle);
+}
+
 static void gdal_nifs_tile_resource_cleanup(ErlNifEnv* env, void* arg)
 {
     DEBUG("Tile resource cleaning for %p\r\n", arg);
@@ -869,6 +888,11 @@ static int on_load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info)
                                                 &gdal_nifs_img_resource_cleanup,
                                                 ERL_NIF_RT_CREATE | ERL_NIF_RT_TAKEOVER,
                                                 NULL);
+
+    gdal_rawdata_RESOURCE = enif_open_resource_type(env, NULL, "gdal_rawdata_resource",
+                                                    &gdal_nifs_rawdata_resource_cleanup,
+                                                    ERL_NIF_RT_CREATE | ERL_NIF_RT_TAKEOVER,
+                                                    NULL);
 
     gdal_tile_RESOURCE = enif_open_resource_type(env, NULL, "gdal_tile_resource",
                                                  &gdal_nifs_tile_resource_cleanup,

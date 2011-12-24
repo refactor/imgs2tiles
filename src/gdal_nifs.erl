@@ -119,8 +119,8 @@ copyout_tile(_Img, _R, _W) ->
 generate_overview_tile(_Tile0, _Tile1, _Tile2, _Tile3) ->
     erlang:nif_error(nif_not_loaded).
 
--spec build_tile(Tile::tile()) -> ok.
-build_tile(_Tile) ->
+-spec build_tile(TileRawdata::tile_rawdata()) -> {ok, tile()}.
+build_tile(_TileRawdata) ->
     erlang:nif_error(nif_not_loaded).
 
 -spec save_tile(Tile::tile(), TileFileName::string()) -> ok.

@@ -20,6 +20,7 @@
 
 -type img()  :: reference().
 -type tile() :: reference().
+-type tile_rawdata() :: reference().
 
 -record(imghandler, { filename :: string(), 
                       img :: img(),
