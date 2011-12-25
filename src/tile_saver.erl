@@ -86,10 +86,12 @@ handle_cast({save, {Tile, Tx, Ty, Tz} = _TileInfo, ImgFileName}, State) ->
             integer_to_list(Ty) ++ "." ++ TilesFileExt]),
     %% Create directories for the tile
     ok = filelib:ensure_dir(TileFilename),
-    io:format("saved tile(~p) by process: ~p~n", [TileFilename, self()]),
-    gdal_nifs:save_tile(Tile, TileFilename),
+    spawn(fun() ->
+        io:format("SAVing tile(~p) in process: ~p~n", [TileFilename, self()]),
+        gdal_nifs:save_tile(Tile, TileFilename),
 
-    scan_monitor:checkout_scan(ImgFileName, now()),
+        scan_monitor:checkout_scan(ImgFileName, now()),
+    ok end),
     {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.

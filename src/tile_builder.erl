@@ -79,11 +79,14 @@ handle_call(_Request, _From, State) ->
 
 %% actually, gen_server is a common process, so the build function here is processed sequentially
 handle_cast({build, TileRawdata, {Tx, Ty, Tz}, ImgFileName}, State) ->
-    {ok, Tile} = gdal_nifs:build_tile(TileRawdata),
-    io:format("built tile(Tx: ~p, Ty: ~p, Tz: ~p) in process: ~p~n", [Tx, Ty, Tz, self()]),
-    TileInfo = {Tile, Tx, Ty, Tz},
-    tile_saver:save(TileInfo, ImgFileName),
-    tile_collect:reduce(TileInfo, ImgFileName),
+    spawn(fun() ->
+        {ok, Tile} = gdal_nifs:build_tile(TileRawdata),
+        io:format("BUILT tile(Tx: ~p, Ty: ~p, Tz: ~p) in process: ~p~n", [Tx, Ty, Tz, self()]),
+        %% each thread MUST have a distinct GDALDataset object
+        {ok, Tile2} = gdal_nifs:clone_tile(Tile),
+        tile_saver:save({Tile2, Tx, Ty, Tz}, ImgFileName),
+        tile_collect:reduce({Tile, Tx, Ty, Tz}, ImgFileName),
+    ok end),
     {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.

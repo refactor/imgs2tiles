@@ -147,6 +147,7 @@ static ERL_NIF_TERM gdal_nifs_copyout_tile(ErlNifEnv* env, int argc, const ERL_N
 static ERL_NIF_TERM gdal_nifs_generate_overview_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
 static ERL_NIF_TERM gdal_nifs_build_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
 static ERL_NIF_TERM gdal_nifs_save_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
+static ERL_NIF_TERM gdal_nifs_clone_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
 static ERL_NIF_TERM gdal_nifs_get_meta(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
 
 static void destroy_img_handle(gdal_img_handle* handle);
@@ -166,6 +167,7 @@ static ErlNifFunc nif_funcs[] =
     {"copyout_tile", 3, gdal_nifs_copyout_tile},
     {"build_tile", 1, gdal_nifs_build_tile},
     {"save_tile", 2, gdal_nifs_save_tile},
+    {"clone_tile", 1, gdal_nifs_clone_tile},
     {"generate_overview_tile", 4, gdal_nifs_generate_overview_tile},
 
     {"get_meta", 1, gdal_nifs_get_meta}
@@ -640,6 +642,37 @@ static ERL_NIF_TERM gdal_nifs_save_tile(ErlNifEnv* env, int argc, const ERL_NIF_
     }
 
     return ATOM_OK;
+}
+
+static ERL_NIF_TERM gdal_nifs_clone_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    DEBUG("clone tile for prallel process\r\n");
+
+    gdal_tile_handle* ti;
+    if (!enif_get_resource(env, argv[0], gdal_tile_RESOURCE, (void**)&ti)) {
+        return enif_make_badarg(env);
+    }
+
+    GDALDriverH hMemDriver = GDALGetDriverByName("MEM");
+    GDALDatasetH cloneDataset = GDALCreateCopy( hMemDriver, "",
+                                                ti->dstile,
+                                                FALSE, NULL, NULL, NULL);
+
+    gdal_tile_handle* hTile = enif_alloc_resource(gdal_tile_RESOURCE, sizeof(*hTile));
+    *hTile = (gdal_tile_handle) {
+        .dstile = cloneDataset,
+ //       .w = w,
+        .querysize = ti->querysize,
+        .tilesize  = ti->tilesize,
+        .dataBandsCount = ti->dataBandsCount,
+        .tilebands = ti->tilebands,
+        .options_resampling = ti->options_resampling
+    };
+
+    ERL_NIF_TERM res = enif_make_resource(env, hTile);
+    enif_release_resource(hTile);  // hTile resource now only owned by "Erlang"
+
+    return enif_make_tuple2(env, ATOM_OK, res);
 }
 
 static ERL_NIF_TERM gdal_nifs_copyout_tile(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])

@@ -43,7 +43,9 @@
 -export([copyout_tile/3,
          build_tile/1,
          generate_overview_tile/4,
-         save_tile/2]).
+         save_tile/2,
+         clone_tile/1
+        ]).
 
 -include("gdal2tiles.hrl").
 
@@ -125,6 +127,10 @@ build_tile(_TileRawdata) ->
 
 -spec save_tile(Tile::tile(), TileFileName::string()) -> ok.
 save_tile(_Tile, _TileFileName) ->
+    erlang:nif_error(nif_not_loaded).
+
+-spec clone_tile(Tile::tile()) -> {ok, tile()} | error.
+clone_tile(_Tile) ->
     erlang:nif_error(nif_not_loaded).
 
 -spec warp_dataset(reference()) -> {ok, rasterinfo()}.
