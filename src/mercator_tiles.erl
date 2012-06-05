@@ -120,7 +120,7 @@
 -export([parent_quadtree/3, quadtree/3]).
 -export([geo_query/3]).
 
--include("gdal2tiles.hrl").
+-include("mercator_tiles.hrl").
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
