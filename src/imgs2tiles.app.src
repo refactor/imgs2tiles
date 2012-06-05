@@ -4,6 +4,7 @@
   {vsn, "0.0.9"},
   {registered, []},
   {applications, [
+                  geo_utils,
                   kernel,
                   stdlib
                  ]},

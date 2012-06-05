@@ -1,6 +1,7 @@
 tags
 *.beam
 *.swp
+*.swo
 *.tif
 *.o
 *.so
@@ -9,5 +10,6 @@ a.out
 *~
 .DS_Store
 ebin/
+deps/*
 priv/
 .eunit/

@@ -1,6 +1,6 @@
 %% QuerySize: How big should be query window be for scaling down
 %% Later on reset according the chosen resampling algorightm
--include("mercator_tiles.hrl").
+-include_lib("geo_utils/include/mercator_tiles.hrl").
 
 -type sizeinfo() :: {QuerySize::non_neg_integer(), TileSize::non_neg_integer()}.
 
